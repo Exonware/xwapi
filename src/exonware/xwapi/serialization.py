@@ -5,7 +5,7 @@ GUIDE_TEST root-cause fix.
 Company: eXonware.com
 Author: eXonware Backend Team
 Email: connect@exonware.com
-Version: 0.0.1.1
+Version: 0.0.1.2
 """
 
 from exonware.xwapi.common.serialization import (

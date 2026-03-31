@@ -5,7 +5,7 @@ Flask-based API server engine using XWAction's FlaskActionEngine.
 Company: eXonware.com
 Author: eXonware Backend Team
 Email: connect@exonware.com
-Version: 0.0.1.1
+Version: 0.0.1.2
 """
 
 from typing import Any, Optional
@@ -13,8 +13,8 @@ from uuid import uuid4
 from datetime import datetime
 from .http_base import AHttpServerEngineBase
 from .contracts import ProtocolType
-from ..config import XWAPIConfig
-from ..errors import (
+from exonware.xwapi.config import XWAPIConfig
+from exonware.xwapi.errors import (
     XWAPIError,
     InternalError,
     ERROR_STATUS_MAP,

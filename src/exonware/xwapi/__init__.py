@@ -4,19 +4,22 @@ xwapi: Entity-to-Web-API Conversion Library
 Company: eXonware.com
 Author: eXonware Backend Team
 Email: connect@exonware.com
-Version: 0.0.1.1
+Version: 0.0.1.2
 """
 # =============================================================================
-# XWLAZY INTEGRATION - Auto-install missing dependencies silently (EARLY)
+# XWLAZY — GUIDE_00_MASTER: config_package_lazy_install_enabled (EARLY)
 # =============================================================================
-# Activate xwlazy BEFORE other imports to enable auto-installation of missing dependencies
-# This enables silent auto-installation of missing libraries when they are imported
-
+# Dependency: exonware-xwlazy ([lazy] extra). Canonical import: exonware.xwlazy
 try:
-    from exonware.xwlazy import auto_enable_lazy
-    auto_enable_lazy(__package__ or "exonware.xwapi", mode="smart")
+    from exonware.xwlazy import config_package_lazy_install_enabled
+
+    config_package_lazy_install_enabled(
+        __package__ or "exonware.xwapi",
+        enabled=True,
+        mode="smart",
+    )
 except ImportError:
-    # xwlazy not installed - lazy mode simply stays disabled (normal behavior)
+    # xwlazy not installed — omit [lazy] extra or install exonware-xwlazy for lazy mode.
     pass
 # Core imports - safe, no dependencies
 from exonware.xwapi.version import __version__, __author__, __email__
@@ -39,7 +42,12 @@ from exonware.xwapi.errors import (
     EntityMappingError,
     OAuth2ConfigurationError,
     EndpointConfigurationError,
+    ServerLifecycleError,
+    StorageUnavailableError,
+    ServicePausedError,
     create_error_response,
+    xwapi_error_to_http_parts,
+    http_status_to_xwapi_error,
     get_http_status_code,
     error_to_http_response,
     get_error_headers,
@@ -97,10 +105,20 @@ from exonware.xwapi.common.openapi import (
 )
 # Server - direct import
 from exonware.xwapi.server.xwserver import XWApiServer
+from exonware.xwapi.server.pipeline import ActionPipelineManager, BackgroundWorker, InMemoryOutboxStore
+from exonware.xwapi.providers import (
+    LocalAuthProvider,
+    XWAuthLibraryProvider,
+    InMemoryStorageProvider,
+    XWStorageProvider,
+    InMemoryPaymentProvider,
+)
+from exonware.xwapi.token_management import APITokenManager
 from exonware.xwapi.contracts import IApiServer
 # Agent - direct import
 from exonware.xwapi.client.xwclient import XWApiAgent
 from exonware.xwapi.contracts import IApiAgent, IApiServicesProvider
+from exonware.xwapi.contracts import IAuthProvider, IStorageProvider, IPaymentProvider
 # Agent engines - direct import
 from exonware.xwapi.client.engines import (
     IApiAgentEngine,
@@ -137,7 +155,12 @@ __all__ = [
     "EntityMappingError",
     "OAuth2ConfigurationError",
     "EndpointConfigurationError",
+    "ServerLifecycleError",
+    "StorageUnavailableError",
+    "ServicePausedError",
     "create_error_response",
+    "xwapi_error_to_http_parts",
+    "http_status_to_xwapi_error",
     "get_http_status_code",
     "error_to_http_response",
     "get_error_headers",
@@ -162,10 +185,22 @@ __all__ = [
     # Serialization - use XWData/XWSystem directly
     # Server management - XWApiServer (extends AApiServer)
     "XWApiServer",
+    "ActionPipelineManager",
+    "BackgroundWorker",
+    "InMemoryOutboxStore",
+    "APITokenManager",
+    "LocalAuthProvider",
+    "XWAuthLibraryProvider",
+    "InMemoryStorageProvider",
+    "XWStorageProvider",
+    "InMemoryPaymentProvider",
     "AApiServer",
     "AApiAgent",
     "AApiServicesProvider",
     "IApiServer",
+    "IAuthProvider",
+    "IStorageProvider",
+    "IPaymentProvider",
     "IApiServicesProvider",
     # Agent system
     "XWApiAgent",

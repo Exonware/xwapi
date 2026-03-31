@@ -1,4 +1,4 @@
-# Source size (src/*): ~365.8 KB
+# Source size (src/*): ~475.4 KB
 [build-system]
 requires = [
     "hatchling",
@@ -26,11 +26,9 @@ classifiers = []
 dependencies = [
     "exonware-xwapi",
 ]
-"fastapi>" = "0.104.0\","
-"uvicorn[standard]>" = "0.24.0\","
-"requests>" = "2.28.0\","
-authors = []
-"{{name" = "eXonware Backend Team"
+authors = [
+    { name = "eXonware Backend Team", email = "connect@exonware.com" },
+]
 
 [project.license]
 text = "MIT"
@@ -39,26 +37,11 @@ text = "MIT"
 dev = [
     "exonware-xwapi[dev]",
 ]
-"pytest>" = [
-    "exonware-xwapi[pytest>]",
-]
-"pytest-asyncio>" = [
-    "exonware-xwapi[pytest-asyncio>]",
-]
-"pytest-cov>" = [
-    "exonware-xwapi[pytest-cov>]",
-]
-"black>" = [
-    "exonware-xwapi[black>]",
-]
-"isort>" = [
-    "exonware-xwapi[isort>]",
-]
-"mypy>" = [
-    "exonware-xwapi[mypy>]",
-]
 lazy = [
     "exonware-xwapi[lazy]",
+]
+storage = [
+    "exonware-xwapi[storage]",
 ]
 full = [
     "exonware-xwapi[full]",

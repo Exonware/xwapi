@@ -7,7 +7,7 @@ structured error codes, and OpenTelemetry correlation.
 Company: eXonware.com
 Author: eXonware Backend Team
 Email: connect@exonware.com
-Version: 0.0.1.1
+Version: 0.0.1.2
 """
 
 from __future__ import annotations
@@ -109,6 +109,21 @@ class OAuth2ConfigurationError(XWAPIError):
 class EndpointConfigurationError(XWAPIError):
     """Error in endpoint configuration."""
     pass
+
+
+class ServerLifecycleError(XWAPIError):
+    """Error in API server lifecycle management."""
+    pass
+
+
+class StorageUnavailableError(XWAPIError):
+    """Persistence backend unavailable or failed."""
+    pass
+
+
+class ServicePausedError(XWAPIError):
+    """Request rejected because endpoint/service is paused."""
+    pass
 # =============================================================================
 # Generic HTTP Status Codes (Engine-Agnostic)
 # =============================================================================
@@ -146,6 +161,21 @@ def get_http_status_code(error: XWAPIError) -> int:
     Returns:
         HTTP status code (integer)
     """
+    if isinstance(error, ValidationError):
+        return HTTP_400_BAD_REQUEST
+    if isinstance(error, AuthenticationError):
+        return HTTP_401_UNAUTHORIZED
+    if isinstance(error, AuthorizationError):
+        return HTTP_403_FORBIDDEN
+    if isinstance(error, NotFoundError):
+        return HTTP_404_NOT_FOUND
+    if isinstance(error, RateLimitError):
+        return HTTP_429_TOO_MANY_REQUESTS
+    if isinstance(error, StorageUnavailableError):
+        return HTTP_503_SERVICE_UNAVAILABLE
+    if isinstance(error, ServicePausedError):
+        return HTTP_503_SERVICE_UNAVAILABLE
+
     error_status_map: dict[str, int] = {
         "ValidationError": HTTP_400_BAD_REQUEST,
         "AuthenticationError": HTTP_401_UNAUTHORIZED,
@@ -158,8 +188,32 @@ def get_http_status_code(error: XWAPIError) -> int:
         "EntityMappingError": HTTP_500_INTERNAL_SERVER_ERROR,
         "OAuth2ConfigurationError": HTTP_500_INTERNAL_SERVER_ERROR,
         "EndpointConfigurationError": HTTP_500_INTERNAL_SERVER_ERROR,
+        "ServerLifecycleError": HTTP_500_INTERNAL_SERVER_ERROR,
+        "StorageUnavailableError": HTTP_503_SERVICE_UNAVAILABLE,
+        "ServicePausedError": HTTP_503_SERVICE_UNAVAILABLE,
+        "ServicePaused": HTTP_503_SERVICE_UNAVAILABLE,
+        "ConnectionError": HTTP_502_BAD_GATEWAY,
     }
     return error_status_map.get(error.code, HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+def http_status_to_xwapi_error(status_code: int, message: str, *, details: Optional[dict[str, Any]] = None) -> XWAPIError:
+    """
+    Translate generic HTTP status codes into the canonical XWAPIError hierarchy.
+    This adapter is engine/protocol agnostic and can be reused by any HTTP engine.
+    """
+    error_details = {"status_code": status_code, **(details or {})}
+    if status_code == HTTP_404_NOT_FOUND:
+        return NotFoundError(message=message, details=error_details)
+    if status_code == HTTP_401_UNAUTHORIZED:
+        return AuthenticationError(message=message, details=error_details)
+    if status_code == HTTP_403_FORBIDDEN:
+        return AuthorizationError(message=message, details=error_details)
+    if status_code == HTTP_429_TOO_MANY_REQUESTS:
+        return RateLimitError(message=message, details=error_details)
+    if status_code in (HTTP_400_BAD_REQUEST, HTTP_422_UNPROCESSABLE_ENTITY):
+        return ValidationError(message=message, details=error_details)
+    return XWAPIError(message=message, code=f"HTTP_{status_code}", details=error_details)
 
 
 def error_to_http_response(
@@ -190,6 +244,28 @@ def error_to_http_response(
     return error_response, status_code
 
 
+def xwapi_error_to_http_parts(
+    error: XWAPIError,
+    request: Optional[Any] = None,
+    include_details: bool = True,
+    extra_headers: Optional[dict[str, str]] = None,
+) -> tuple[dict[str, Any], int, dict[str, str]]:
+    """
+    Convert an XWAPIError into framework-neutral HTTP response parts.
+    Returns body, status code, and headers so engines/adapters can render natively.
+    """
+    trace_id = None
+    if request is not None:
+        trace_id = get_trace_id(request)
+
+    body = create_error_response(error, trace_id=trace_id, include_details=include_details)
+    status_code = get_http_status_code(error)
+    headers = get_error_headers(trace_id=trace_id)
+    if extra_headers:
+        headers.update(extra_headers)
+    return body, status_code, headers
+
+
 def get_trace_id(request: Any) -> str:
     """
     Get or generate trace_id for request (engine-agnostic).
@@ -206,29 +282,36 @@ def get_trace_id(request: Any) -> str:
         Trace ID string (UUID)
     """
     # Check headers first (engine-agnostic)
+    state = getattr(request, "state", None)
     headers = getattr(request, "headers", None)
     if headers:
         # Try dict-like access (.get() method)
         if hasattr(headers, "get"):
             trace_id = headers.get("X-Trace-Id")
             if trace_id:
+                if state is not None:
+                    setattr(state, "trace_id", trace_id)
                 return trace_id
         # Try dict-like access ([] operator)
         elif hasattr(headers, "__getitem__"):
             try:
                 trace_id = headers["X-Trace-Id"]
                 if trace_id:
+                    if state is not None:
+                        setattr(state, "trace_id", trace_id)
                     return trace_id
             except (KeyError, TypeError):
                 pass
     # Check request state (set by middleware) - engine-agnostic
-    state = getattr(request, "state", None)
     if state and hasattr(state, "trace_id"):
         trace_id = getattr(state, "trace_id", None)
         if trace_id is not None:
             return trace_id
     # Generate new trace ID
-    return str(uuid4())
+    trace_id = str(uuid4())
+    if state is not None:
+        setattr(state, "trace_id", trace_id)
+    return trace_id
 
 
 def create_error_response(

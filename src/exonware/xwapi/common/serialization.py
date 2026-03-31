@@ -5,23 +5,22 @@ Uses xwsystem Json/Yaml serializers. GUIDE_TEST root-cause fix.
 Company: eXonware.com
 Author: eXonware Backend Team
 Email: connect@exonware.com
-Version: 0.0.1.1
+Version: 0.0.1.2
 """
 
 from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from exonware.xwsystem import JsonSerializer, YamlSerializer
 
 def save_openapi_settings(data: dict[str, Any], path: str | Path) -> None:
     """Save OpenAPI settings to JSON or YAML file (by extension)."""
     path = Path(path)
     suffix = path.suffix.lower()
     if suffix in (".yaml", ".yml"):
-        from exonware.xwsystem.io.serialization.formats.text import YamlSerializer
         ser = YamlSerializer()
     else:
-        from exonware.xwsystem.io.serialization.formats.text import JsonSerializer
         ser = JsonSerializer()
     ser.save_file(data, path)
 
@@ -31,10 +30,8 @@ def load_openapi_settings(path: str | Path) -> dict[str, Any]:
     path = Path(path)
     suffix = path.suffix.lower()
     if suffix in (".yaml", ".yml"):
-        from exonware.xwsystem.io.serialization.formats.text import YamlSerializer
         ser = YamlSerializer()
     else:
-        from exonware.xwsystem.io.serialization.formats.text import JsonSerializer
         ser = JsonSerializer()
     out = ser.load_file(path)
     return out if isinstance(out, dict) else {"openapi": "3.1.0", "info": out}

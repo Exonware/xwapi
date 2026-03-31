@@ -1,73 +1,49 @@
 # Project Reference — xwapi
 
 **Library:** exonware-xwapi  
-**Last Updated:** 07-Feb-2026
-
-Requirements and project status (output of GUIDE_22_PROJECT). Per REF_35_REVIEW.
-
----
+**Last Updated:** 31-Mar-2026
 
 ## Vision
 
-xwapi provides the **API layer** for the eXonware ecosystem: servers, engines, middleware, OpenAPI, query integration, serialization, and xwaction integration. It is the backend surface for Firebase replacement (Hosting/Functions/API gateway role), exposing unified APIs that delegate to xwauth, xwstorage, xwquery, xwdata, and other libraries.
+`xwapi` is the API control plane for eXonware services: expose actions/entities safely, keep engine coupling low, and provide production operational primitives (pipeline + token lifecycle + governance middleware).
 
----
+## Major completed capabilities
 
-## Goals
+| Capability | Status |
+|-----------|--------|
+| Server/engine abstraction | Done |
+| Middleware stack and operational controls | Done |
+| OpenAPI generation and schema integration | Done |
+| Engine-agnostic error contract + adapters | Done |
+| Outbox + singleton background worker pipeline | Done |
+| API token lifecycle/usage/recharge management | Done |
+| Provider interfaces (auth/storage/payment) and adapters | Done |
+| Scope-aware API token middleware + idempotent metering | Done |
+| Production admin guardrails | Done |
+| 4-layer testing (`0.core`..`3.advance`) | Done |
 
-1. **Unified API surface:** Servers and engines that expose REST/OpenAPI and query endpoints.
-2. **Middleware and engines:** Pluggable middleware; engine abstraction for different runtimes.
-3. **OpenAPI:** Generation and compliance for API documentation and client generation.
-4. **Integration:** xwaction, xwquery, serialization; auth (xwauth) and storage (xwstorage) where used.
-5. **Firebase backend parity:** API gateway and Functions hosting surface.
+## Scope and boundaries
 
----
+- `xwapi` orchestrates API/runtime concerns.
+- `xwapi` does not own full auth/storage/payment implementations; it uses provider contracts and adapters.
+- Reuse is explicit across `xwsystem`, `xwaction`, `xwentity`, `xwschema`, and `xwdata`.
 
-## Functional Requirements (Summary)
+## Current priorities
 
-| ID | Requirement | Priority | Status |
-|----|-------------|----------|--------|
-| FR-001 | Server and engine abstraction | High | Done |
-| FR-002 | Middleware pipeline | High | Done |
-| FR-003 | OpenAPI generation and compliance | High | Done |
-| FR-004 | Query and serialization integration | High | Done |
-| FR-005 | xwaction integration | Medium | Done |
-| FR-006 | 4-layer tests (0.core–3.advance) | High | Done |
+1. Reliability under load and long-run soak coverage.
+2. Continued engine/protocol-agnostic hardening.
+3. Provider-backed production integrations (beyond in-memory defaults).
+4. Documentation alignment with evolving runtime/admin surfaces.
 
----
+## Remaining roadmap items (known)
 
-## Non-Functional Requirements (5 Priorities)
-
-1. **Security:** Auth integration, input validation (align with xwauth).
-2. **Usability:** Clear API surface, PROJECT_PHASES, ENGINE_ROADMAP.
-3. **Maintainability:** REF_*, logs under docs/.
-4. **Performance:** Engine and middleware performance.
-5. **Extensibility:** Pluggable engines and middleware.
-
----
-
-## Project Status Overview
-
-- **Current phase:** Alpha (Medium). 57+ Python files; servers, engines, middleware, OpenAPI, query, serialization, action integration; 4-layer tests.
-- **Docs:** REF_22_PROJECT (this file), REF_13_ARCH, REF_35_REVIEW; PROJECT_PHASES, ENGINE_ROADMAP, FUTURE_PLANS; logs/reviews/.
-
----
-
-## Milestones
-
-| Milestone | Target | Status |
-|-----------|--------|--------|
-| M1 — Core servers and engines | v0.x | Done |
-| M2 — OpenAPI and middleware | v0.x | Done |
-| M3 — REF_* and review compliance | v0.x | Done (REF_22, REF_13, INDEX) |
-
----
+- Concrete durable outbox backends (Oracle AQ / DB scheduler adapters).
+- Production payment provider adapters.
+- Expanded scope-policy mapping strategies from action security metadata.
+- Additional audit/event sinks for compliance-heavy deployments.
 
 ## Traceability
 
-- **Project → Arch:** This document → [REF_13_ARCH.md](REF_13_ARCH.md).
-- **Review evidence:** [REF_35_REVIEW.md](REF_35_REVIEW.md), [logs/reviews/](logs/reviews/).
-
----
-
-*See GUIDE_22_PROJECT.md for requirements process.*
+- Architecture: [REF_13_ARCH.md](REF_13_ARCH.md)
+- API surface: [REF_15_API.md](REF_15_API.md)
+- Testing: [REF_51_TEST.md](REF_51_TEST.md)

@@ -7,12 +7,13 @@ Tracks request count, latency, error rate, and tenant usage.
 Company: eXonware.com
 Author: eXonware Backend Team
 Email: connect@exonware.com
-Version: 0.0.1.1
+Version: 0.0.1.2
 """
 
 from typing import Callable
 from time import time
-from fastapi import Request, Response
+from starlette.requests import Request
+from starlette.responses import Response
 async def observability_middleware(request: Request, call_next: Callable) -> Response:
     """
     Observability middleware.

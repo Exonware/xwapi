@@ -1,11 +1,10 @@
 # xwapi
 
-**Entity-to-Web-API.** Turn xwentity classes and internal functions into production-ready REST APIs (FastAPI, OpenAPI); connect to external APIs; same framework, minimal boilerplate. Per project docs.
+Engine-agnostic API framework for the eXonware stack. `xwapi` exposes `xwentity` and `xwaction` as HTTP endpoints, standardizes error contracts, supports production middleware, and now includes a durable action pipeline plus API token lifecycle/metering.
 
-*Full feature tour, architecture, and examples: [README_LONG.md](README_LONG.md).*
+*Longer guide: [README_LONG.md](README_LONG.md).*
 
-**Company:** eXonware.com · **Author:** eXonware Backend Team · **Email:** connect@exonware.com  
-**Version:** See [version.py](src/exonware/xwapi/version.py) or PyPI. · **Updated:** See [version.py](src/exonware/xwapi/version.py) (`__date__`)
+**Company:** eXonware.com · **Author:** eXonware Backend Team · **Email:** connect@exonware.com
 
 [![Status](https://img.shields.io/badge/status-beta-blue.svg)](https://exonware.com)
 [![Python](https://img.shields.io/badge/python-3.12%2B-blue.svg)](https://www.python.org)
@@ -17,9 +16,9 @@
 
 | Install | When to use |
 |---------|-------------|
-| `pip install exonware-xwapi` | **Lite** — core only |
-| `pip install exonware-xwapi[lazy]` | **Lazy** — auto-install on first import |
-| `pip install exonware-xwapi[full]` | **Full** — production, all deps |
+| `pip install exonware-xwapi` | Core runtime |
+| `pip install exonware-xwapi[lazy]` | Lazy dependency loading |
+| `pip install exonware-xwapi[full]` | Full production dependency set |
 
 ---
 
@@ -28,46 +27,61 @@
 ```python
 from exonware.xwapi import XWAPI
 from exonware.xwentity import XWEntity
-from exonware.xwstorage import XWStorage
+
 
 class User(XWEntity):
     name: str
     email: str
     age: int
 
-storage = XWStorage(backend='embedded')
-api = XWAPI(entities=[User], storage=storage, title="My API", version="1.0.0")
-openapi_config = await api.generate_openapi()
-app = api.create_fastapi_app()
-# Run: uvicorn app:app --host 0.0.0.0 --port 8000
-```
 
-See [docs/](docs/) for OAuth2, actions, middleware, and REF_*.
+api = XWAPI(entities=[User], title="My API", version="1.0.0")
+app = api.create_app(engine="fastapi")
+```
 
 ---
 
-## What you get
+## New production features
 
-| Area | What's in it |
-|------|----------------|
-| **API generation** | Entity → CRUD endpoints; xwaction → endpoints; OpenAPI 3.1. |
-| **Integration** | xwentity, xwauth, xwstorage, xwschema, xwquery; FastAPI-native. |
-| **Security** | OAuth 2.0, API key, bearer; rate limit, tenant, observability middleware. |
-| **Multi-protocol** | REST; GraphQL/gRPC/WebSocket when implemented. |
+- **Engine-agnostic error contract:** `xwapi_error_to_http_parts` plus adapters keeps `XWAPIError` transport-neutral.
+- **Outbox + singleton worker pipeline:** `ActionPipelineManager`, `AOutboxStore`/`InMemoryOutboxStore`, and `BackgroundWorker`.
+- **API token lifecycle:** create/list/revoke tokens, usage tracking, balance/recharge, idempotent metering.
+- **Provider abstractions:** `IAuthProvider`, `IStorageProvider`, `IPaymentProvider` with in-memory and library adapters.
+- **API token middleware:** bearer verification, optional scope enforcement, deny-unmapped policy, usage metering via `Idempotency-Key`.
+- **Admin/operations endpoints:** server status/health/pipeline controls and token admin endpoints.
+- **Production guardrails:** environment-based admin token enforcement and admin read-protection support.
+
+---
+
+## eXonware integration
+
+`xwapi` now explicitly integrates with:
+
+- `xwsystem` (serialization, logging/utilities)
+- `xwaction` (action registration and execution)
+- `xwentity` (entity-driven API surfaces)
+- `xwschema` (schema validation/generation integration points)
+- `xwdata` (data/serialization integration paths)
 
 ---
 
 ## Docs and tests
 
-- **Start:** [docs/INDEX.md](docs/INDEX.md) or [docs/](docs/).
-- **Tests:** `python tests/runner.py` or pytest per project layout (0.core, 1.unit, 2.integration, 3.advance).
+- Start at [docs/INDEX.md](docs/INDEX.md).
+- API and architecture references: [docs/REF_15_API.md](docs/REF_15_API.md), [docs/REF_13_ARCH.md](docs/REF_13_ARCH.md).
+- Test layers: `0.core`, `1.unit`, `2.integration`, `3.advance`.
+- Full run: `python tests/runner.py`
 
 ---
 
-## License and links
+## Async support
 
-MIT — see [LICENSE](LICENSE). **Homepage:** https://exonware.com · **Repository:** https://github.com/exonware/xwapi  
+- Core runtime includes async methods across facade, token manager, middleware paths, and server actions.
+- Async APIs are recommended for I/O-heavy and concurrent workloads.
 
-Contributing → CONTRIBUTING.md · Security → SECURITY.md (when present).
+---
+
+MIT - see [LICENSE](LICENSE). Homepage: https://exonware.com
+Version: 0.0.1.2 | Updated: 01-Apr-2026
 
 *Built with ❤️ by eXonware.com - Revolutionizing Python Development Since 2025*

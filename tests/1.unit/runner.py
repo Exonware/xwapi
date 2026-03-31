@@ -16,7 +16,20 @@ from pathlib import Path
 # Add src to path if needed
 test_dir = Path(__file__).parent
 monorepo_root = test_dir.parent.parent.parent
-for pkg in ("xwapi", "xwsystem", "xwentity", "xwauth", "xwstorage", "xwaction", "xwschema"):
+for pkg in (
+    "xwapi",
+    "xwsystem",
+    "xwentity",
+    "xwauth",
+    "xwstorage",
+    "xwaction",
+    "xwschema",
+    "xwdata",
+    "xwnode",
+    "xwquery",
+    "xwjson",
+    "xwsyntax",
+):
     src = monorepo_root / pkg / "src"
     if src.is_dir():
         sys.path.insert(0, str(src))
@@ -38,7 +51,20 @@ def _find_monorepo_root(start: Path) -> Path:
 def _add_monorepo_src_paths() -> None:
     """Add all required sibling package src/ folders to sys.path for monorepo testing."""
     monorepo_root = _find_monorepo_root(Path(__file__).resolve())
-    for pkg in ("xwapi", "xwsystem", "xwentity", "xwauth", "xwstorage", "xwaction", "xwschema"):
+    for pkg in (
+        "xwapi",
+        "xwsystem",
+        "xwentity",
+        "xwauth",
+        "xwstorage",
+        "xwaction",
+        "xwschema",
+        "xwdata",
+        "xwnode",
+        "xwquery",
+        "xwjson",
+        "xwsyntax",
+    ):
         src = monorepo_root / pkg / "src"
         if src.is_dir():
             sys.path.insert(0, str(src))

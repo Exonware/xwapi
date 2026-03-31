@@ -5,7 +5,7 @@ IMAP protocol server (RFC 9051) for syncing emails.
 Company: eXonware.com
 Author: eXonware Backend Team
 Email: connect@exonware.com
-Version: 0.0.1.1
+Version: 0.0.1.2
 """
 
 from typing import Any, Optional, Callable, Dict
@@ -14,7 +14,7 @@ from email.message import EmailMessage
 from .base import AApiServerEngineBase
 from .contracts import ProtocolType, IApiServerEngine
 from .email_store import IEmailStore, InMemoryEmailStore
-from ..config import XWAPIConfig
+from exonware.xwapi.config import XWAPIConfig
 from exonware.xwsystem import get_logger
 logger = get_logger(__name__)
 

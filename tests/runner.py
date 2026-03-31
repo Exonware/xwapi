@@ -39,7 +39,20 @@ def _add_monorepo_src_paths() -> None:
     """Add all required sibling package src/ folders to sys.path for monorepo testing."""
     test_dir = Path(__file__).parent
     monorepo_root = _find_monorepo_root(test_dir.resolve())
-    for pkg in ("xwapi", "xwsystem", "xwentity", "xwauth", "xwstorage", "xwaction", "xwschema"):
+    for pkg in (
+        "xwapi",
+        "xwsystem",
+        "xwentity",
+        "xwauth",
+        "xwstorage",
+        "xwaction",
+        "xwschema",
+        "xwdata",
+        "xwnode",
+        "xwquery",
+        "xwjson",
+        "xwsyntax",
+    ):
         src = monorepo_root / pkg / "src"
         if src.is_dir():
             sys.path.insert(0, str(src))

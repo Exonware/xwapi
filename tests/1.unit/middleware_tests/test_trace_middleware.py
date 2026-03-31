@@ -57,3 +57,20 @@ async def test_trace_middleware_calls_next():
     # Should call next middleware
     mock_call_next.assert_called_once_with(mock_request)
     assert response == mock_response
+
+
+@pytest.mark.xwapi_unit
+@pytest.mark.asyncio
+async def test_trace_middleware_ignores_blank_header_trace_id():
+    """Blank inbound trace header should be replaced with generated value."""
+    mock_request = MagicMock()
+    mock_request.headers = {"X-Trace-Id": ""}
+    mock_request.state = MagicMock()
+    mock_request.state.trace_id = None
+    mock_response = MagicMock()
+    mock_response.headers = {}
+    mock_call_next = AsyncMock(return_value=mock_response)
+
+    response = await trace_middleware(mock_request, mock_call_next)
+
+    assert response.headers["X-Trace-Id"] != ""

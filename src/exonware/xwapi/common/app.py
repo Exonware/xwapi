@@ -8,20 +8,12 @@ Works with any engine (FastAPI, Flask, etc.).
 Company: eXonware.com
 Author: eXonware Backend Team
 Email: connect@exonware.com
-Version: 0.0.1.1
+Version: 0.0.1.2
 """
 
 import logging
-from typing import Any, Optional, Callable, TYPE_CHECKING
+from typing import Any, Optional, Callable
 from datetime import datetime, timedelta
-# Engine-specific imports deferred - use TYPE_CHECKING for type hints only
-if TYPE_CHECKING:
-    from fastapi import FastAPI, APIRouter, Request
-else:
-    # Runtime imports deferred - will import when needed via engine abstraction
-    FastAPI = None
-    APIRouter = None
-    Request = None
 from exonware.xwapi.config import XWAPIConfig
 from exonware.xwapi.version import __version__
 logger = logging.getLogger(__name__)
@@ -60,22 +52,12 @@ def create_app(
         if title: config.title = title
         if version: config.version = version
         if description: config.description = description
-    # Dispatch to engine (engine-agnostic pattern)
-    if engine.lower() == "flask":
-        from exonware.xwapi.server.engines.flask import FlaskServerEngine
-        server_engine = FlaskServerEngine()
-    elif engine.lower() == "fastapi":
-        from exonware.xwapi.server.engines.fastapi import FastAPIServerEngine
-        server_engine = FastAPIServerEngine()
-    elif engine.lower() == "websocket":
-        from exonware.xwapi.server.engines.websocket import WebSocketServerEngine
-        server_engine = WebSocketServerEngine()
-    else:
-        # Try registry as fallback (engine-agnostic pattern)
-        from exonware.xwapi.server.engines import api_server_engine_registry
-        server_engine = api_server_engine_registry.get_engine(engine)
-        if not server_engine:
-             raise ValueError(f"Unknown engine: {engine}")
+    # Dispatch to engine via registry first (engine-agnostic pattern).
+    engine_name = (engine or "").strip().lower()
+    from exonware.xwapi.server.engines import api_server_engine_registry
+    server_engine = api_server_engine_registry.get_engine(engine_name)
+    if not server_engine:
+        raise ValueError(f"Unknown engine: {engine}")
     return server_engine.create_app(config)
 
 
@@ -102,27 +84,21 @@ def register_module(
         >>> app = create_app(engine="fastapi")
         >>> 
         >>> # Engine-specific router creation
-        >>> from fastapi import APIRouter
-        >>> router = APIRouter()
+        >>> router = SomeRouterType()
         >>> router.get("/users")(get_users)
         >>> 
         >>> register_module(app, router, prefix="/v1", tags=["users"])
     """
-    # Detect engine from app type (engine-agnostic pattern)
-    app_type_name = type(app).__module__ + "." + type(app).__name__
-    if "fastapi" in app_type_name.lower():
-        # FastAPI-specific registration
-        from fastapi import FastAPI, APIRouter, Request
-        # Include router
+    # Prefer capability-based registration over framework-name detection.
+    if hasattr(app, "include_router"):
         app.include_router(
             router,
             prefix=prefix,
             tags=tags or [],
         )
-        # Add deprecation middleware if needed
-        if deprecated:
+        if deprecated and hasattr(app, "middleware"):
             @app.middleware("http")
-            async def deprecation_middleware(request: Request, call_next: Callable):
+            async def deprecation_middleware(request: Any, call_next: Callable):
                 """Add deprecation headers to responses."""
                 if request.url.path.startswith(prefix):
                     response = await call_next(request)
@@ -131,12 +107,12 @@ def register_module(
                         response.headers["Sunset"] = sunset.strftime("%a, %d %b %Y %H:%M:%S GMT")
                     return response
                 return await call_next(request)
-    else:
-        # For None or unknown engines, raise appropriate error (engine-agnostic)
-        if app is None:
-            raise TypeError("Cannot register module with None app")
-        # For other engines, delegate to engine-specific implementation
-        raise NotImplementedError(f"Module registration not implemented for engine type: {app_type_name}")
+        return
+
+    if app is None:
+        raise TypeError("Cannot register module with None app")
+    app_type_name = type(app).__module__ + "." + type(app).__name__
+    raise NotImplementedError(f"Module registration not implemented for engine type: {app_type_name}")
 
 
 def add_version_router(
@@ -183,10 +159,7 @@ def add_openapi_endpoints(app: Any) -> None:  # Engine-agnostic: accepts any fra
     Args:
         app: Framework application instance (engine-specific)
     """
-    # Detect engine from app type (engine-agnostic pattern)
-    app_type_name = type(app).__module__ + "." + type(app).__name__
-    if "fastapi" in app_type_name.lower():
-        # FastAPI-specific OpenAPI endpoints
+    if hasattr(app, "get") and hasattr(app, "openapi"):
         @app.get("/openapi.json", include_in_schema=False)
         async def get_openapi_json() -> dict[str, Any]:
             """Get OpenAPI specification as JSON."""
@@ -204,6 +177,7 @@ def add_openapi_endpoints(app: Any) -> None:  # Engine-agnostic: accepts any fra
                 # Fallback: try xwsystem serializer
                 from exonware.xwsystem.io.serialization import YamlSerializer
                 return YamlSerializer().encode(schema, options={"default_flow_style": False})
-    else:
-        # For other engines, delegate to engine-specific implementation
-        raise NotImplementedError(f"OpenAPI endpoints not implemented for engine type: {app_type_name}")
+        return
+
+    app_type_name = type(app).__module__ + "." + type(app).__name__
+    raise NotImplementedError(f"OpenAPI endpoints not implemented for engine type: {app_type_name}")

@@ -7,27 +7,36 @@ Provides all server functionality directly.
 Company: eXonware.com
 Author: eXonware Backend Team
 Email: connect@exonware.com
-Version: 0.0.1.1
+Version: 0.0.1.2
 """
 
 from typing import Any, Optional
 import sys
+import os
 import socket
 import subprocess
 import platform
 import inspect
+import asyncio
 from dataclasses import replace
 from exonware.xwapi.server.base import AApiServer
 from exonware.xwapi.config import XWAPIConfig
 from exonware.xwapi.server.engines import api_server_engine_registry, IApiServerEngine
 from exonware.xwapi.server.engines.contracts import ProtocolType
-from exonware.xwapi.errors import XWAPIError
-from exonware.xwsystem import get_logger
-# Type hint for request parameter in management endpoints
-try:
-    from fastapi import Request
-except ImportError:
-    Request = Any
+from exonware.xwapi.errors import XWAPIError, ValidationError, ServerLifecycleError
+from exonware.xwapi.server.pipeline import ActionPipelineManager
+from exonware.xwapi.providers import (
+    LocalAuthProvider,
+    XWAuthLibraryProvider,
+    InMemoryStorageProvider,
+    XWStorageProvider,
+    InMemoryPaymentProvider,
+)
+from exonware.xwapi.token_management import APITokenManager
+from exonware.xwapi.server.middleware.pause import PauseControlMiddleware
+from exonware.xwapi.server.middleware.admin_auth import AdminTokenMiddleware
+from exonware.xwapi.server.middleware.api_token import APITokenMiddleware
+from exonware.xwsystem import JsonSerializer, get_logger
 # Import agent engines for future use
 from exonware.xwapi.client.engines import api_agent_engine_registry, IApiAgentEngine
 logger = get_logger(__name__)
@@ -63,6 +72,11 @@ class XWApiServer(AApiServer):
         runtime_dir: Optional[str] = None,
         services: Optional[Any] = None,
         auth: Optional[Any] = None,
+        storage: Optional[Any] = None,
+        auth_provider: Optional[Any] = None,
+        storage_provider: Optional[Any] = None,
+        payment_provider: Optional[Any] = None,
+        admin_token: Optional[str] = None,
         **kwargs
     ):
         """
@@ -74,9 +88,14 @@ class XWApiServer(AApiServer):
             max_instances: Maximum number of instances per server_id (default: 1)
             runtime_dir: Directory for lockfiles (default: .xwapi_runtime in current dir)
             services: Optional services configuration. Can be:
-                - A list [prefix, services_obj] (e.g., ["", xwauth.api.services])
+                - A list [prefix, services_obj] (e.g., ["", xwauth services provider])
                 - A services object with AUTH_SERVICES attribute
-            auth: Optional auth instance (for xwauth services, auto-created if not provided)
+            auth: Optional xwauth library instance
+            storage: Optional xwstorage library instance
+            auth_provider: Optional auth provider adapter (defaults to xwauth adapter or local provider)
+            storage_provider: Optional storage provider adapter (defaults to xwstorage adapter or in-memory)
+            payment_provider: Optional payment provider adapter (defaults to in-memory)
+            admin_token: Optional token to protect mutating admin endpoints.
             **kwargs: Additional config options (merged into config)
         Raises:
             XWAPIError: If engine not found or initialization fails
@@ -125,6 +144,52 @@ class XWApiServer(AApiServer):
         self._admin_enabled = True  # Enable admin endpoints by default
         self._admin_prefix = "/server"
         self._admin_tag = "Server"
+        token_from_env = os.environ.get("XWAPI_ADMIN_TOKEN", "")
+        self._admin_token = (admin_token if admin_token is not None else token_from_env).strip() or None
+        self._admin_protect_reads = os.environ.get("XWAPI_ADMIN_PROTECT_READ", "").strip().lower() in {"1", "true", "yes", "on"}
+        env_mode = os.environ.get("XWAPI_ENV", "").strip().lower()
+        insecure_admin_override = os.environ.get("XWAPI_ALLOW_INSECURE_ADMIN", "").strip().lower() in {"1", "true", "yes", "on"}
+        if env_mode in {"prod", "production"} and not self._admin_token and not insecure_admin_override:
+            raise XWAPIError(
+                "Admin token is required in production mode. "
+                "Set XWAPI_ADMIN_TOKEN or explicitly opt in with XWAPI_ALLOW_INSECURE_ADMIN=1."
+            )
+        if env_mode in {"prod", "production"} and self._admin_token:
+            # In production, keep operational reads protected by default when token auth is enabled.
+            self._admin_protect_reads = True
+        self._admin_auth_prefixes: set[str] = {self._admin_prefix}
+        self._api_token_middleware_enabled = (
+            os.environ.get("XWAPI_API_TOKEN_MIDDLEWARE", "").strip().lower() in {"1", "true", "yes", "on"}
+        )
+        self._api_token_require_bearer = (
+            os.environ.get("XWAPI_API_TOKEN_REQUIRE_BEARER", "").strip().lower() in {"1", "true", "yes", "on"}
+        )
+        self._api_token_enforce_scopes = (
+            os.environ.get("XWAPI_API_TOKEN_ENFORCE_SCOPES", "").strip().lower() in {"1", "true", "yes", "on"}
+        )
+        self._api_token_scope_deny_unmapped = (
+            os.environ.get("XWAPI_API_TOKEN_SCOPE_DENY_UNMAPPED", "").strip().lower() in {"1", "true", "yes", "on"}
+        )
+        try:
+            self._api_token_usage_amount = float(os.environ.get("XWAPI_API_TOKEN_USAGE_AMOUNT", "0") or 0.0)
+        except Exception:
+            self._api_token_usage_amount = 0.0
+        default_scopes_raw = os.environ.get("XWAPI_API_TOKEN_DEFAULT_REQUIRED_SCOPES", "")
+        self._api_token_default_required_scopes: set[str] = {
+            s.strip() for s in default_scopes_raw.split(",") if s.strip()
+        }
+        extra_exempt_raw = os.environ.get("XWAPI_API_TOKEN_EXEMPT_PATHS", "")
+        extra_exempt = {p.strip() for p in extra_exempt_raw.split(",") if p.strip()}
+        self._api_token_exempt_paths: set[str] = {
+            "/",
+            "/health",
+            "/openapi.json",
+            "/openapi.yaml",
+            "/docs",
+            "/redoc",
+            *extra_exempt,
+        }
+        self._api_token_scope_rules: list[dict[str, Any]] = []
 
         # Initialize core state BEFORE engine/app creation so attributes exist
         # even if engines access them during startup.
@@ -132,6 +197,39 @@ class XWApiServer(AApiServer):
         self._collected_schemas: dict[str, dict[str, Any]] = {}  # Store collected schemas for OpenAPI
         # Initialize handlers list to prevent AttributeError in stop()
         self._flushable_handlers: list[Any] = []
+        self._global_paused = False
+        self._paused_routes: set[tuple[str, str]] = set()
+        self._pause_allow_paths: set[str] = {
+            "/health",
+            "/server/status",
+            "/server/pipeline",
+            "/server/pause",
+            "/server/resume",
+            "/server/start",
+            "/server/stop",
+            "/server/restart",
+        }
+        # Outbox + singleton worker pipeline:
+        # - outbox layer keeps durable job intent
+        # - worker layer executes jobs serially in one singleton worker
+        self._pipeline = ActionPipelineManager(owner_id=self._server_id)
+        self._registered_action_handlers: dict[str, Any] = {}
+        # Provider-style integrations (library-first: xwauth/xwstorage adapters).
+        self._auth_instance = auth
+        self._storage_instance = storage
+        self._auth_provider = auth_provider or (
+            XWAuthLibraryProvider(auth) if auth is not None else LocalAuthProvider()
+        )
+        self._storage_provider = storage_provider or (
+            XWStorageProvider(storage) if storage is not None else InMemoryStorageProvider()
+        )
+        self._payment_provider = payment_provider or InMemoryPaymentProvider()
+        self._token_manager = APITokenManager(
+            auth_provider=self._auth_provider,
+            storage_provider=self._storage_provider,
+            payment_provider=self._payment_provider,
+            storage_prefix=f"xwapi/{self._server_id}/token_mgmt",
+        )
 
         # Create app using strategy
         try:
@@ -149,6 +247,12 @@ class XWApiServer(AApiServer):
                     # Update app state with latest schemas
                     self._app.state.xwapi_collected_schemas = self._collected_schemas
                 self._app.state.on_action_registered = on_action_registered
+                # Request-level pause control for endpoint/service freezing.
+                if hasattr(self._app, "add_middleware"):
+                    self._app.add_middleware(PauseControlMiddleware)
+                    if self._api_token_middleware_enabled:
+                        self._app.add_middleware(APITokenMiddleware)
+                    self._app.add_middleware(AdminTokenMiddleware)
             # Register admin endpoints if enabled
             if self._admin_enabled:
                 self.register_admin_endpoints(
@@ -165,11 +269,7 @@ class XWApiServer(AApiServer):
         self._port: Optional[int] = None
         # Services configuration (for xwauth-style services)
         self._services_config: Optional[Any] = None
-        self._auth_instance: Optional[Any] = None
-        # Admin endpoints configuration
-        self._admin_enabled = True  # Enable admin endpoints by default
-        self._admin_prefix = "/server"
-        self._admin_tag = "Server"
+        self._auth_instance = auth
         # Auto-register services if provided
         if services is not None:
             # services can be a list [prefix, services_obj] or just services_obj
@@ -194,15 +294,9 @@ class XWApiServer(AApiServer):
                 import os
                 from exonware.xwauth import XWAuth
                 from exonware.xwauth.config import XWAuthConfig, DEFAULT_TEST_CLIENTS
-                from exonware.xwauth_api import create_xwstorage_provider
-                storage_path = os.environ.get("XWAUTH_API_STORAGE_PATH", "data/xwauth")
-                try:
-                    storage = create_xwstorage_provider(base_path=storage_path)
-                except ImportError:
-                    storage = None
-                    logger.warning("xwstorage not available; using in-memory storage")
+                storage = self._storage_instance
                 config_obj = XWAuthConfig(
-                    jwt_secret=os.environ.get("XWAUTH_JWT_SECRET", "xwauth-api-full-server-change-in-production"),
+                    jwt_secret=os.environ.get("XWAUTH_JWT_SECRET", "xwauth-lib-integration-change-in-production"),
                     registered_clients=DEFAULT_TEST_CLIENTS,
                 )
                 self._auth_instance = XWAuth(config=config_obj, storage=storage)
@@ -210,8 +304,8 @@ class XWApiServer(AApiServer):
                 logger.warning("xwauth not available, skipping auto-registration")
                 return
         # Determine issuer
-        host = os.environ.get("XWAUTH_API_HOST", "127.0.0.1")
-        port = int(os.environ.get("XWAUTH_API_PORT", "8000"))
+        host = os.environ.get("XWAUTH_HOST", "127.0.0.1")
+        port = int(os.environ.get("XWAUTH_PORT", "8000"))
         issuer = f"http://{host}:{port}"
         # Register services
         self.register_services(
@@ -227,7 +321,7 @@ class XWApiServer(AApiServer):
             for action in self._actions:
                 self._collect_action_schemas(action)
         # Also scan app routes to collect schemas from any actions registered directly
-        # (e.g., via register_auth_routes_from_services)
+        # (e.g., via manual service handler registration)
         if hasattr(self, '_app') and self._app and hasattr(self._app, 'routes'):
             for route in self._app.routes:
                 if hasattr(route, 'endpoint'):
@@ -304,12 +398,300 @@ class XWApiServer(AApiServer):
             ProtocolType.HTTP_RPC
         ]
 
+    @staticmethod
+    def _normalize_route_path(path: str) -> str:
+        """Normalize route paths for pause-policy matching."""
+        if not path:
+            return "/"
+        normalized = "/" + path.strip("/")
+        return normalized if normalized != "" else "/"
+
+    @staticmethod
+    def _normalize_method(method: str) -> str:
+        """Normalize HTTP method names."""
+        normalized = (method or "GET").upper()
+        # HEAD requests are semantically tied to GET for pause policy.
+        if normalized == "HEAD":
+            return "GET"
+        return normalized
+
+    def should_block_request(self, method: str, path: str) -> bool:
+        """Return whether a request should be blocked by pause policy."""
+        normalized_path = self._normalize_route_path(path)
+        if normalized_path in self._pause_allow_paths:
+            return False
+        if self._global_paused:
+            return True
+        key = (self._normalize_method(method), normalized_path)
+        return key in self._paused_routes
+
+    def pause_endpoint(self, path: str, method: str = "GET") -> tuple[str, str]:
+        """Pause an endpoint route and return its normalized key."""
+        key = (self._normalize_method(method), self._normalize_route_path(path))
+        self._paused_routes.add(key)
+        return key
+
+    def resume_endpoint(self, path: str, method: str = "GET") -> tuple[str, str]:
+        """Resume an endpoint route and return its normalized key."""
+        key = (self._normalize_method(method), self._normalize_route_path(path))
+        self._paused_routes.discard(key)
+        return key
+
+    def set_global_pause(self, paused: bool) -> None:
+        """Enable or disable global request pause."""
+        self._global_paused = paused
+
+    def get_pause_state(self) -> dict[str, Any]:
+        """Return current pause policy state."""
+        return {
+            "global_paused": self._global_paused,
+            "paused_routes": sorted([{"method": method, "path": path} for method, path in self._paused_routes], key=lambda item: (item["path"], item["method"])),
+        }
+
+    def pause_all_requests(self) -> None:
+        """Pause all non-allowlisted HTTP requests."""
+        self.set_global_pause(True)
+
+    def resume_all_requests(self) -> None:
+        """Resume all globally paused HTTP requests."""
+        self.set_global_pause(False)
+
+    def _build_status_snapshot(self) -> dict[str, Any]:
+        """Build a canonical status payload for Python and HTTP surfaces."""
+        return {
+            "status": "running" if self._is_running else "stopped",
+            "is_running": self._is_running,
+            "host": self._host or "0.0.0.0",
+            "port": self._port or 8000,
+            "engine": self._engine_name,
+            "actions_count": len(self._actions),
+            "services_running": self._services_running,
+            "pause": self.get_pause_state(),
+            "pipeline": self._pipeline.status(),
+        }
+
+    def status(self) -> dict[str, Any]:
+        """Return rich runtime status for production operations."""
+        return self._build_status_snapshot()
+
+    def health(self) -> dict[str, Any]:
+        """Return health snapshot with pause and service context."""
+        from datetime import datetime
+
+        return {
+            "status": "healthy" if self._is_running else "unhealthy",
+            "timestamp": datetime.now().isoformat(),
+            "is_running": self._is_running,
+            "services_running": self._services_running,
+            "pause": {"global_paused": self._global_paused},
+            "pipeline": self._pipeline.status(),
+            "engine": self._engine_name,
+            "server_id": self._server_id,
+        }
+
+    @staticmethod
+    def _invoke_action_callable(action: Any, args: Optional[list[Any]] = None, kwargs: Optional[dict[str, Any]] = None) -> Any:
+        """Invoke sync/async action callables from pipeline jobs."""
+        call_args = list(args or [])
+        call_kwargs = dict(kwargs or {})
+        result = action(*call_args, **call_kwargs)
+        if inspect.isawaitable(result):
+            return asyncio.run(result)
+        return result
+
+    def register_pipeline_handler(self, job_type: str, handler: Any) -> None:
+        """Register custom pipeline job handler."""
+        self._pipeline.register_handler(job_type, handler)
+
+    def enqueue_pipeline_job(
+        self,
+        job_type: str,
+        payload: dict[str, Any],
+        *,
+        run_after: Optional[Any] = None,
+        max_attempts: int = 5,
+    ) -> str:
+        """Enqueue a job into the outbox layer."""
+        return self._pipeline.enqueue(
+            job_type=job_type,
+            payload=payload,
+            run_after=run_after,
+            max_attempts=max_attempts,
+        )
+
+    def enqueue_action_job(
+        self,
+        action_name: str,
+        *,
+        args: Optional[list[Any]] = None,
+        kwargs: Optional[dict[str, Any]] = None,
+        max_attempts: int = 5,
+    ) -> str:
+        """Enqueue execution of a registered action via the background worker."""
+        if action_name not in self._registered_action_handlers:
+            raise ValidationError(
+                message=f"Unknown action for pipeline: {action_name}",
+                details={"action_name": action_name},
+            )
+        payload = {
+            "args": list(args or []),
+            "kwargs": dict(kwargs or {}),
+        }
+        return self.enqueue_pipeline_job(action_name, payload, max_attempts=max_attempts)
+
+    def start_pipeline_worker(self) -> None:
+        """Start singleton background worker."""
+        try:
+            self._pipeline.start()
+        except RuntimeError as exc:
+            raise ServerLifecycleError(
+                message="Failed to start pipeline worker singleton",
+                details={"owner": self._server_id, "error": str(exc)},
+            ) from exc
+
+    def stop_pipeline_worker(self) -> None:
+        """Stop background worker."""
+        self._pipeline.stop()
+
+    async def create_api_token(
+        self,
+        *,
+        subject_id: str,
+        name: str,
+        scopes: list[str],
+        expires_in_seconds: Optional[int] = None,
+        metadata: Optional[dict[str, Any]] = None,
+    ) -> dict[str, Any]:
+        return await self._token_manager.create_token(
+            subject_id=subject_id,
+            name=name,
+            scopes=scopes,
+            expires_in_seconds=expires_in_seconds,
+            metadata=metadata,
+        )
+
+    async def revoke_api_token(self, token_id: str) -> bool:
+        return await self._token_manager.revoke_token(token_id)
+
+    async def list_api_tokens(self, subject_id: Optional[str] = None) -> list[dict[str, Any]]:
+        return await self._token_manager.list_tokens(subject_id=subject_id)
+
+    async def record_api_token_usage(
+        self,
+        *,
+        token_id: str,
+        amount: float,
+        operation: str,
+        metadata: Optional[dict[str, Any]] = None,
+        idempotency_key: str | None = None,
+    ) -> dict[str, Any]:
+        return await self._token_manager.record_usage(
+            token_id=token_id,
+            amount=amount,
+            operation=operation,
+            metadata=metadata,
+            idempotency_key=idempotency_key,
+        )
+
+    async def recharge_subject(
+        self,
+        *,
+        subject_id: str,
+        amount: float,
+        currency: str = "USD",
+        metadata: Optional[dict[str, Any]] = None,
+    ) -> dict[str, Any]:
+        return await self._token_manager.recharge(
+            subject_id=subject_id,
+            amount=amount,
+            currency=currency,
+            metadata=metadata,
+        )
+
+    async def get_subject_balance(self, subject_id: str) -> float:
+        return await self._token_manager.get_balance(subject_id)
+
+    @staticmethod
+    def _normalize_scope_set(value: Any) -> set[str]:
+        if isinstance(value, str):
+            candidate = value.strip()
+            return {candidate} if candidate else set()
+        if isinstance(value, (list, tuple, set)):
+            return {str(item).strip() for item in value if str(item).strip()}
+        return set()
+
+    def _extract_required_scopes_from_action(self, action: Any) -> set[str]:
+        scopes: set[str] = set()
+        security_config = getattr(action, "security_config", None)
+        if isinstance(security_config, dict):
+            for _, configured_scopes in security_config.items():
+                scopes.update(self._normalize_scope_set(configured_scopes))
+            return scopes
+        scopes.update(self._normalize_scope_set(security_config))
+        return scopes
+
+    def _register_api_token_scope_rule(
+        self,
+        *,
+        method: str,
+        path: str,
+        required_scopes: set[str],
+    ) -> None:
+        normalized_method = str(method or "GET").upper()
+        normalized_path = str(path or "/").strip() or "/"
+        existing = next(
+            (
+                rule
+                for rule in self._api_token_scope_rules
+                if rule.get("method") == normalized_method and rule.get("path") == normalized_path
+            ),
+            None,
+        )
+        if existing is not None:
+            existing["scopes"] = set(required_scopes)
+            return
+        self._api_token_scope_rules.append(
+            {
+                "method": normalized_method,
+                "path": normalized_path,
+                "scopes": set(required_scopes),
+            }
+        )
+
+    @staticmethod
+    async def _parse_request_json_payload(request: Any) -> dict[str, Any]:
+        """Parse request payload into a JSON object using shared xwsystem serializer fallback."""
+        if isinstance(request, dict):
+            return request
+        if request is None:
+            return {}
+        if hasattr(request, "json"):
+            try:
+                parsed = await request.json()
+                if isinstance(parsed, dict):
+                    return parsed
+                raise ValueError("JSON payload must be an object")
+            except ValueError:
+                raise
+            except Exception:
+                pass
+        if hasattr(request, "body"):
+            raw = await request.body()
+            if not raw:
+                return {}
+            parsed = JsonSerializer().loads(raw.decode("utf-8"))
+            if isinstance(parsed, dict):
+                return parsed
+            raise ValueError("JSON payload must be an object")
+        return {}
+
     def register_action(
         self,
         action: Any,
         path: Optional[str] = None,
         method: str = "POST",
-        route_info: Optional[dict[str, Any]] = None
+        route_info: Optional[dict[str, Any]] = None,
+        required_scopes: Optional[list[str]] = None,
     ) -> bool:
         """
         Register XWAction as API endpoint/route.
@@ -379,13 +761,37 @@ class XWApiServer(AApiServer):
             if success:
                 self._actions.append(action_to_register)
                 logger.info(f"Registered action at {method} {path}")
+                route_method = str(route_info.get("method") if isinstance(route_info, dict) else method or "GET").upper()
+                route_path = str(route_info.get("path") if isinstance(route_info, dict) else path or "/")
+                resolved_scopes = (
+                    self._normalize_scope_set(required_scopes)
+                    or self._extract_required_scopes_from_action(action_to_register)
+                    or set(self._api_token_default_required_scopes)
+                )
+                self._register_api_token_scope_rule(
+                    method=route_method,
+                    path=route_path,
+                    required_scopes=resolved_scopes,
+                )
+                # Register action handler for outbox/background execution by api name.
+                action_name = getattr(action_to_register, 'api_name', None) or getattr(action, '__name__', 'unknown')
+                if callable(action):
+                    self._registered_action_handlers[action_name] = action
+                    self._pipeline.register_handler(
+                        action_name,
+                        lambda payload, _action=action: self._invoke_action_callable(
+                            _action,
+                            args=payload.get("args", []),
+                            kwargs=payload.get("kwargs", {}),
+                        ),
+                    )
                 # Collect schemas from the action (smart schema collection)
                 self._collect_action_schemas(action_to_register)
                 # Call post_register_action hook
                 route_info_with_meta = {
                     **route_info,
                     "action": action_to_register,
-                    "api_name": getattr(action_to_register, 'api_name', None) or getattr(action, '__name__', 'unknown')
+                    "api_name": action_name,
                 }
                 self.post_register_action(action_to_register, route_info_with_meta)
             else:
@@ -560,7 +966,7 @@ class XWApiServer(AApiServer):
         except Exception as e:
             self._is_running = False
             logger.error(f"Server crashed: {e}")
-            raise e
+            raise
         finally:
             # 5. Cleanup when server stops
             self._is_running = False
@@ -596,16 +1002,20 @@ class XWApiServer(AApiServer):
         # Call pre_services_start hook
         self.pre_services_start()
         logger.info("Starting domain services...")
+        self.start_pipeline_worker()
         self._services_running = True
         # Call post_services_start hook
         self.post_services_start()
         logger.info("Domain services started successfully")
 
-    def stop(self) -> None:
+    def stop(self, dispose: bool = False) -> None:
         """
         Stop the HTTP server and domain services.
         This method stops both domain services and the HTTP server.
         It calls lifecycle hooks and flushes all registered flushable handlers.
+        Args:
+            dispose: If True, unregister instance from governance registry.
+                Keep False for normal stop/restart lifecycle.
         Note: Behavior depends on the engine. For development servers
         (uvicorn), this may not be applicable as they run in the main thread.
         """
@@ -614,6 +1024,7 @@ class XWApiServer(AApiServer):
         # Stop domain services first
         if self._services_running:
             logger.info("Stopping domain services...")
+            self.stop_pipeline_worker()
             self._services_running = False
         # Stop HTTP server
         if not self._is_running:
@@ -626,13 +1037,14 @@ class XWApiServer(AApiServer):
             self._host = None
             self._port = None
             self._start_time = None
-        # Release lockfile
+        # Release lockfile to allow clean restart in same process.
         if self._lockfile_manager:
             self._lockfile_manager.release()
-        # Unregister from instance registry
-        from exonware.xwapi.server.governance import get_registry
-        registry = get_registry()
-        registry.unregister(self._server_id, self)
+        if dispose:
+            # Unregister only for final disposal, not normal stop/restart cycle.
+            from exonware.xwapi.server.governance import get_registry
+            registry = get_registry()
+            registry.unregister(self._server_id, self)
         # Flush all registered flushable handlers
         if self._flushable_handlers:
             logger.info(f"Flushing {len(self._flushable_handlers)} handlers...")
@@ -660,6 +1072,7 @@ class XWApiServer(AApiServer):
             logger.warning("Services are not running")
             return
         logger.info("Stopping domain services...")
+        self.stop_pipeline_worker()
         self._services_running = False
         logger.info("Domain services stopped successfully")
 
@@ -668,7 +1081,7 @@ class XWApiServer(AApiServer):
         logger.info("Restarting server...")
         host = self._host or "0.0.0.0"
         port = self._port or 8000
-        self.stop()
+        self.stop(dispose=False)
         self.start(host=host, port=port)
         logger.info("Server restarted successfully")
 
@@ -695,7 +1108,7 @@ class XWApiServer(AApiServer):
         issuer: Optional[str] = None
     ) -> None:
         """
-        Register services from a services module (e.g., xwauth.api.services).
+        Register services from a services module/provider.
         This method automatically registers all services from the provided services
         object, which should have an AUTH_SERVICES attribute containing a list of
         (path, method, handler) tuples.
@@ -714,25 +1127,11 @@ class XWApiServer(AApiServer):
             auth_services = getattr(services, 'AUTH_SERVICES', [])
         else:
             raise ValueError("services object must have AUTH_SERVICES attribute")
-        # Check if this is xwauth services
-        try:
-            from exonware.xwauth.api import register_auth_routes_from_services
-            # This is xwauth services - use xwauth's registration function
-            if auth is None:
-                logger.warning("auth instance not provided for xwauth services")
-                return
-            register_auth_routes_from_services(
-                app=self._app,
-                auth=auth,
-                issuer=issuer
-            )
-            logger.info(f"Registered {len(auth_services)} xwauth services")
-        except ImportError:
-            # Not xwauth services - register manually
-            logger.info(f"Registering {len(auth_services)} services manually")
-            for path, method, handler in auth_services:
-                self.register_action(handler, path=path, method=method)
-            logger.info(f"Registered {len(auth_services)} services")
+        # Library-first integration: service handlers are registered directly.
+        logger.info(f"Registering {len(auth_services)} services manually")
+        for path, method, handler in auth_services:
+            self.register_action(handler, path=path, method=method)
+        logger.info(f"Registered {len(auth_services)} services")
 
     def _collect_action_schemas(self, action: Any) -> None:
         """
@@ -848,6 +1247,23 @@ class XWApiServer(AApiServer):
         self._admin_enabled = enabled
         self._admin_prefix = prefix
         self._admin_tag = tag
+        self._admin_auth_prefixes.add(prefix)
+        # Ensure admin paths remain available during pause mode.
+        self._pause_allow_paths.update({
+            "/health",
+            f"{prefix}/status",
+            f"{prefix}/health",
+            f"{prefix}/pipeline",
+            f"{prefix}/tokens/list",
+            f"{prefix}/tokens/usage",
+            f"{prefix}/tokens/balance",
+            f"{prefix}/log",
+            f"{prefix}/pause",
+            f"{prefix}/resume",
+            f"{prefix}/start",
+            f"{prefix}/stop",
+            f"{prefix}/restart",
+        })
         if not enabled:
             logger.debug("Admin endpoints disabled")
             return
@@ -866,6 +1282,7 @@ class XWApiServer(AApiServer):
         except ImportError:
             logger.warning("XWAction not available, skipping management endpoints")
             return
+        action_engine = self._engine_name
         # Store server reference in app state
         if not hasattr(self._app.state, 'xwserver'):
             self._app.state.xwserver = self
@@ -875,29 +1292,260 @@ class XWApiServer(AApiServer):
             method="GET",
             description="Get server status and information.",
             tags=[tag],
-            engine="fastapi",
+            engine=action_engine,
             profile=ActionProfile.ENDPOINT,
         )
-        async def server_status(request: Any) -> dict[str, Any]:
+        async def server_status(request: Any = None) -> dict[str, Any]:
             """Get server status."""
-            return {
-                "status": "running" if self._is_running else "stopped",
-                "host": self._host or "0.0.0.0",
-                "port": self._port or 8000,
-                "engine": self._engine_name,
-                "actions_count": len(self._actions),
-                "services_running": self._services_running
-            }
+            return self._build_status_snapshot()
+
+        @XWAction(
+            operationId="server_health",
+            summary="Server Health",
+            method="GET",
+            description="Get server health details for liveness/readiness checks.",
+            tags=[tag],
+            engine=action_engine,
+            profile=ActionProfile.ENDPOINT,
+        )
+        async def server_health(request: Any = None) -> dict[str, Any]:
+            """Return health details."""
+            return self.health()
+
+        @XWAction(
+            operationId="server_pipeline",
+            summary="Server Pipeline",
+            method="GET",
+            description="Get Outbox + Background Worker pipeline status.",
+            tags=[tag],
+            engine=action_engine,
+            profile=ActionProfile.ENDPOINT,
+        )
+        async def server_pipeline(request: Any = None) -> dict[str, Any]:
+            """Return pipeline status details."""
+            return self._pipeline.status()
+
+        @XWAction(
+            operationId="server_tokens_create",
+            summary="Create API Token",
+            method="POST",
+            description="Create API token for a subject with scopes and expiration.",
+            tags=[tag],
+            engine=action_engine,
+            profile=ActionProfile.ENDPOINT,
+        )
+        async def server_tokens_create(
+            subject_id: Optional[str] = None,
+            name: Optional[str] = None,
+            scopes: Optional[list[str]] = None,
+            expires_in_seconds: Optional[int] = None,
+            metadata: Optional[dict[str, Any]] = None,
+            request: Any = None,
+        ) -> dict[str, Any]:
+            payload: dict[str, Any] = {}
+            if isinstance(request, dict):
+                payload = request
+            elif request is not None and hasattr(request, "json"):
+                try:
+                    payload = await request.json()
+                except Exception:
+                    payload = {}
+            subject_id = str(subject_id or payload.get("subject_id") or "")
+            name = str(name or payload.get("name") or "")
+            scopes = scopes if isinstance(scopes, list) else payload.get("scopes") or []
+            expires_in_seconds = expires_in_seconds if isinstance(expires_in_seconds, int) else payload.get("expires_in_seconds")
+            metadata = metadata if isinstance(metadata, dict) else payload.get("metadata") or {}
+            if not subject_id.strip() or not name.strip():
+                raise ValueError("subject_id and name are required for token creation")
+            created = await self.create_api_token(
+                subject_id=subject_id,
+                name=name,
+                scopes=list(scopes) if isinstance(scopes, list) else [],
+                expires_in_seconds=expires_in_seconds if isinstance(expires_in_seconds, int) else None,
+                metadata=metadata if isinstance(metadata, dict) else {},
+            )
+            return {"status": "created", **created}
+
+        @XWAction(
+            operationId="server_tokens_list",
+            summary="List API Tokens",
+            method="GET",
+            description="List API tokens for a subject.",
+            tags=[tag],
+            engine=action_engine,
+            profile=ActionProfile.ENDPOINT,
+        )
+        async def server_tokens_list(subject_id: Optional[str] = None, request: Any = None) -> dict[str, Any]:
+            resolved_subject_id = str(subject_id or "")
+            if isinstance(request, dict):
+                resolved_subject_id = resolved_subject_id or str(request.get("subject_id") or "")
+            elif request is not None and hasattr(request, "query_params"):
+                resolved_subject_id = resolved_subject_id or str(request.query_params.get("subject_id") or "")
+            tokens = await self.list_api_tokens(subject_id=resolved_subject_id or None)
+            return {"status": "ok", "subject_id": resolved_subject_id or None, "tokens": tokens}
+
+        @XWAction(
+            operationId="server_tokens_revoke",
+            summary="Revoke API Token",
+            method="POST",
+            description="Revoke an API token by token_id.",
+            tags=[tag],
+            engine=action_engine,
+            profile=ActionProfile.ENDPOINT,
+        )
+        async def server_tokens_revoke(token_id: Optional[str] = None, request: Any = None) -> dict[str, Any]:
+            payload: dict[str, Any] = {}
+            if isinstance(request, dict):
+                payload = request
+            elif request is not None and hasattr(request, "json"):
+                try:
+                    payload = await request.json()
+                except Exception:
+                    payload = {}
+            resolved_token_id = str(token_id or payload.get("token_id") or "")
+            if not resolved_token_id:
+                raise ValueError("token_id is required")
+            revoked = await self.revoke_api_token(resolved_token_id)
+            return {"status": "revoked" if revoked else "not_found", "token_id": resolved_token_id}
+
+        @XWAction(
+            operationId="server_tokens_usage_record",
+            summary="Record Token Usage",
+            method="POST",
+            description="Record usage event and consume subject credits.",
+            tags=[tag],
+            engine=action_engine,
+            profile=ActionProfile.ENDPOINT,
+        )
+        async def server_tokens_usage_record(
+            token_id: Optional[str] = None,
+            amount: Optional[float] = None,
+            operation: Optional[str] = None,
+            metadata: Optional[dict[str, Any]] = None,
+            request: Any = None,
+        ) -> dict[str, Any]:
+            payload: dict[str, Any] = {}
+            if isinstance(request, dict):
+                payload = request
+            elif request is not None and hasattr(request, "json"):
+                try:
+                    payload = await request.json()
+                except Exception:
+                    payload = {}
+            resolved_token_id = str(token_id or payload.get("token_id") or "")
+            resolved_amount = float(amount if amount is not None else payload.get("amount") or 0.0)
+            resolved_operation = str(operation or payload.get("operation") or "request")
+            resolved_metadata = metadata if isinstance(metadata, dict) else payload.get("metadata") or {}
+            if not resolved_token_id or resolved_amount <= 0:
+                raise ValueError("token_id and positive amount are required")
+            event = await self.record_api_token_usage(
+                token_id=resolved_token_id,
+                amount=resolved_amount,
+                operation=resolved_operation,
+                metadata=resolved_metadata if isinstance(resolved_metadata, dict) else {},
+            )
+            return {"status": "recorded", "usage": event}
+
+        @XWAction(
+            operationId="server_tokens_usage_list",
+            summary="Get Token Usage",
+            method="GET",
+            description="Get usage history for token_id.",
+            tags=[tag],
+            engine=action_engine,
+            profile=ActionProfile.ENDPOINT,
+        )
+        async def server_tokens_usage_list(token_id: Optional[str] = None, request: Any = None) -> dict[str, Any]:
+            resolved_token_id = str(token_id or "")
+            if isinstance(request, dict):
+                resolved_token_id = resolved_token_id or str(request.get("token_id") or "")
+            elif request is not None and hasattr(request, "query_params"):
+                resolved_token_id = resolved_token_id or str(request.query_params.get("token_id") or "")
+            if not resolved_token_id:
+                raise ValueError("token_id is required")
+            usage = await self._token_manager.get_usage(resolved_token_id)
+            return {"status": "ok", "token_id": resolved_token_id, "usage": usage}
+
+        @XWAction(
+            operationId="server_tokens_recharge",
+            summary="Recharge Subject Credits",
+            method="POST",
+            description="Recharge subject credits through payment provider.",
+            tags=[tag],
+            engine=action_engine,
+            profile=ActionProfile.ENDPOINT,
+        )
+        async def server_tokens_recharge(
+            subject_id: Optional[str] = None,
+            amount: Optional[float] = None,
+            currency: Optional[str] = None,
+            metadata: Optional[dict[str, Any]] = None,
+            request: Any = None,
+        ) -> dict[str, Any]:
+            payload: dict[str, Any] = {}
+            if isinstance(request, dict):
+                payload = request
+            elif request is not None and hasattr(request, "json"):
+                try:
+                    payload = await request.json()
+                except Exception:
+                    payload = {}
+            resolved_subject_id = str(subject_id or payload.get("subject_id") or "")
+            resolved_amount = float(amount if amount is not None else payload.get("amount") or 0.0)
+            resolved_currency = str(currency or payload.get("currency") or "USD")
+            resolved_metadata = metadata if isinstance(metadata, dict) else payload.get("metadata") or {}
+            if not resolved_subject_id or resolved_amount <= 0:
+                raise ValueError("subject_id and positive amount are required")
+            event = await self.recharge_subject(
+                subject_id=resolved_subject_id,
+                amount=resolved_amount,
+                currency=resolved_currency,
+                metadata=resolved_metadata if isinstance(resolved_metadata, dict) else {},
+            )
+            return {"status": "recharged", "event": event}
+
+        @XWAction(
+            operationId="server_tokens_balance",
+            summary="Get Subject Balance",
+            method="GET",
+            description="Get current subject credit balance.",
+            tags=[tag],
+            engine=action_engine,
+            profile=ActionProfile.ENDPOINT,
+        )
+        async def server_tokens_balance(subject_id: Optional[str] = None, request: Any = None) -> dict[str, Any]:
+            resolved_subject_id = str(subject_id or "")
+            if isinstance(request, dict):
+                resolved_subject_id = resolved_subject_id or str(request.get("subject_id") or "")
+            elif request is not None and hasattr(request, "query_params"):
+                resolved_subject_id = resolved_subject_id or str(request.query_params.get("subject_id") or "")
+            if not resolved_subject_id:
+                raise ValueError("subject_id is required")
+            balance = await self.get_subject_balance(resolved_subject_id)
+            return {"status": "ok", "subject_id": resolved_subject_id, "balance": balance}
+
+        @XWAction(
+            operationId="server_health_root",
+            summary="Health Check",
+            method="GET",
+            description="Root health endpoint kept available during pause mode.",
+            tags=[tag],
+            engine=action_engine,
+            profile=ActionProfile.ENDPOINT,
+        )
+        async def health_root(request: Any = None) -> dict[str, Any]:
+            """Return root health details."""
+            return self.health()
         @XWAction(
             operationId="server_start",
             summary="Start Server",
             method="POST",
             description="Start the API server (if not already running).",
             tags=[tag],
-            engine="fastapi",
+            engine=action_engine,
             profile=ActionProfile.ENDPOINT,
         )
-        async def server_start(request: Any) -> dict[str, Any]:
+        async def server_start(request: Any = None) -> dict[str, Any]:
             """Start the server."""
             if self._is_running:
                 return {
@@ -917,31 +1565,42 @@ class XWApiServer(AApiServer):
             method="POST",
             description="Stop the API server.",
             tags=[tag],
-            engine="fastapi",
+            engine=action_engine,
             profile=ActionProfile.ENDPOINT,
         )
-        async def server_stop(request: Any) -> dict[str, Any]:
+        async def server_stop(request: Any = None) -> dict[str, Any]:
             """Stop the server."""
             if not self._is_running:
                 return {"status": "already_stopped", "message": "Server is already stopped"}
             try:
+                logger.warning(
+                    "Admin stop requested",
+                    extra={"server_id": self._server_id, "engine": self._engine_name},
+                )
                 self.stop()
                 return {"status": "stopped", "message": "Server stop signal sent"}
             except Exception as e:
-                return {"status": "error", "message": str(e)}
+                raise ServerLifecycleError(
+                    message="Failed to stop server",
+                    details={"server_id": self._server_id, "error": str(e)},
+                ) from e
         @XWAction(
             operationId="server_restart",
             summary="Restart Server",
             method="POST",
             description="Restart the API server.",
             tags=[tag],
-            engine="fastapi",
+            engine=action_engine,
             profile=ActionProfile.ENDPOINT,
         )
-        async def server_restart(request: Any) -> dict[str, Any]:
+        async def server_restart(request: Any = None) -> dict[str, Any]:
             """Restart the server."""
             try:
                 if self._is_running:
+                    logger.warning(
+                        "Admin restart requested",
+                        extra={"server_id": self._server_id, "engine": self._engine_name},
+                    )
                     self.stop()
                 # Note: start() is blocking, so restart via API requires external process management
                 return {
@@ -950,35 +1609,156 @@ class XWApiServer(AApiServer):
                     "note": "For programmatic restart, use server.stop() then server.start() in a separate thread/process"
                 }
             except Exception as e:
-                return {"status": "error", "message": str(e)}
+                raise ServerLifecycleError(
+                    message="Failed to process restart request",
+                    details={"server_id": self._server_id, "error": str(e)},
+                ) from e
+
+        @XWAction(
+            operationId="server_log",
+            summary="Server Log",
+            method="POST",
+            description="Write a log entry through server logger.",
+            tags=[tag],
+            engine=action_engine,
+            profile=ActionProfile.ENDPOINT,
+        )
+        async def server_log(request: Any = None) -> dict[str, Any]:
+            """Write a log entry with optional level/message payload."""
+            payload: dict[str, Any] = {}
+            if isinstance(request, dict):
+                payload = request
+            elif request is not None and hasattr(request, "json"):
+                try:
+                    payload = await request.json()
+                except Exception:
+                    payload = {}
+
+            level = str(payload.get("level", "INFO")).upper()
+            message = str(payload.get("message", ""))
+            self.log(level=level, message=message)
+            return {"status": "logged", "level": level, "message": message}
         @XWAction(
             operationId="server_pause",
             summary="Pause Endpoint/Service",
             method="POST",
             description="Pause a specific endpoint or service.",
             tags=[tag],
-            engine="fastapi",
+            engine=action_engine,
             profile=ActionProfile.ENDPOINT,
         )
-        async def server_pause(request: Any) -> dict[str, Any]:
+        async def server_pause(request: Any = None) -> dict[str, Any]:
             """Pause an endpoint or service."""
-            # TODO: Implement endpoint pause/resume via middleware
-            return {"status": "not_implemented", "message": "Endpoint pause/resume coming soon"}
+            payload: dict[str, Any] = {}
+            if isinstance(request, dict):
+                payload = request
+            elif request is not None and all(hasattr(request, attr) for attr in ("endpoint", "service", "method")):
+                payload = {
+                    "endpoint": getattr(request, "endpoint", None),
+                    "service": getattr(request, "service", None),
+                    "method": getattr(request, "method", "GET"),
+                }
+            elif request is not None:
+                try:
+                    payload = await self._parse_request_json_payload(request)
+                except Exception as exc:
+                    raise ValidationError(
+                        message="Invalid JSON payload for pause request",
+                        details={"server_id": self._server_id},
+                    ) from exc
+            service_name = payload.get("service")
+            endpoint_path = payload.get("endpoint")
+            endpoint_method = payload.get("method", "GET")
+            if service_name:
+                logger.warning(
+                    "Pausing service",
+                    extra={"server_id": self._server_id, "service": service_name},
+                )
+                self.stop_services()
+                return {"status": "paused", "message": "Service paused", "service": service_name}
+            if endpoint_path:
+                paused = self.pause_endpoint(endpoint_path, endpoint_method)
+                logger.warning(
+                    "Pausing endpoint",
+                    extra={"server_id": self._server_id, "path": paused[1], "method": paused[0]},
+                )
+                return {
+                    "status": "paused",
+                    "message": "Endpoint paused",
+                    "endpoint": paused[1],
+                    "method": paused[0],
+                    "pause": self.get_pause_state(),
+                }
+            self.set_global_pause(True)
+            logger.warning("Global pause enabled", extra={"server_id": self._server_id})
+            return {"status": "paused", "message": "Global pause enabled", "pause": self.get_pause_state()}
         @XWAction(
             operationId="server_resume",
             summary="Resume Endpoint/Service",
             method="POST",
             description="Resume a paused endpoint or service.",
             tags=[tag],
-            engine="fastapi",
+            engine=action_engine,
             profile=ActionProfile.ENDPOINT,
         )
-        async def server_resume(request: Any) -> dict[str, Any]:
+        async def server_resume(request: Any = None) -> dict[str, Any]:
             """Resume an endpoint or service."""
-            # TODO: Implement endpoint pause/resume via middleware
-            return {"status": "not_implemented", "message": "Endpoint pause/resume coming soon"}
+            payload: dict[str, Any] = {}
+            if isinstance(request, dict):
+                payload = request
+            elif request is not None and all(hasattr(request, attr) for attr in ("endpoint", "service", "method")):
+                payload = {
+                    "endpoint": getattr(request, "endpoint", None),
+                    "service": getattr(request, "service", None),
+                    "method": getattr(request, "method", "GET"),
+                }
+            elif request is not None:
+                try:
+                    payload = await self._parse_request_json_payload(request)
+                except Exception as exc:
+                    raise ValidationError(
+                        message="Invalid JSON payload for resume request",
+                        details={"server_id": self._server_id},
+                    ) from exc
+            service_name = payload.get("service")
+            endpoint_path = payload.get("endpoint")
+            endpoint_method = payload.get("method", "GET")
+            if service_name:
+                logger.warning(
+                    "Resuming service",
+                    extra={"server_id": self._server_id, "service": service_name},
+                )
+                self.start_services()
+                return {"status": "resumed", "message": "Service resumed", "service": service_name}
+            if endpoint_path:
+                resumed = self.resume_endpoint(endpoint_path, endpoint_method)
+                logger.warning(
+                    "Resuming endpoint",
+                    extra={"server_id": self._server_id, "path": resumed[1], "method": resumed[0]},
+                )
+                return {
+                    "status": "resumed",
+                    "message": "Endpoint resumed",
+                    "endpoint": resumed[1],
+                    "method": resumed[0],
+                    "pause": self.get_pause_state(),
+                }
+            self.set_global_pause(False)
+            logger.warning("Global pause disabled", extra={"server_id": self._server_id})
+            return {"status": "resumed", "message": "Global pause disabled", "pause": self.get_pause_state()}
         # Register management endpoints
         self.register_action(server_status, path=f"{prefix}/status", method="GET")
+        self.register_action(server_health, path=f"{prefix}/health", method="GET")
+        self.register_action(server_pipeline, path=f"{prefix}/pipeline", method="GET")
+        self.register_action(server_tokens_create, path=f"{prefix}/tokens/create", method="POST")
+        self.register_action(server_tokens_list, path=f"{prefix}/tokens/list", method="GET")
+        self.register_action(server_tokens_revoke, path=f"{prefix}/tokens/revoke", method="POST")
+        self.register_action(server_tokens_usage_record, path=f"{prefix}/tokens/usage", method="POST")
+        self.register_action(server_tokens_usage_list, path=f"{prefix}/tokens/usage", method="GET")
+        self.register_action(server_tokens_recharge, path=f"{prefix}/tokens/recharge", method="POST")
+        self.register_action(server_tokens_balance, path=f"{prefix}/tokens/balance", method="GET")
+        self.register_action(health_root, path="/health", method="GET")
+        self.register_action(server_log, path=f"{prefix}/log", method="POST")
         self.register_action(server_start, path=f"{prefix}/start", method="POST")
         self.register_action(server_stop, path=f"{prefix}/stop", method="POST")
         self.register_action(server_restart, path=f"{prefix}/restart", method="POST")

@@ -7,12 +7,13 @@ and OpenTelemetry integration.
 Company: eXonware.com
 Author: eXonware Backend Team
 Email: connect@exonware.com
-Version: 0.0.1.1
+Version: 0.0.1.2
 """
 
 from typing import Callable
 from uuid import uuid4
-from fastapi import Request, Response
+from starlette.requests import Request
+from starlette.responses import Response
 async def trace_middleware(request: Request, call_next: Callable) -> Response:
     """
     Trace ID middleware.

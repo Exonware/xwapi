@@ -1,42 +1,35 @@
-# Documentation index — xwapi
+# Documentation Index — xwapi
 
-**Last Updated:** 07-Feb-2026
+**Last Updated:** 31-Mar-2026
 
-Navigation hub for xwapi docs. Per GUIDE_41_DOCS and GUIDE_00_MASTER.
+This index reflects the current production feature set of `xwapi`, including engine-agnostic error handling, outbox/worker pipeline, and API token lifecycle/metering.
 
-## References (REF_*)
+## Core references
 
-| Document | Purpose | Producing guide |
-|----------|---------|------------------|
-| [REF_22_PROJECT.md](REF_22_PROJECT.md) | Vision, requirements, milestones | GUIDE_22_PROJECT |
-| [REF_13_ARCH.md](REF_13_ARCH.md) | Architecture and layering | GUIDE_13_ARCH |
-| [REF_15_API.md](REF_15_API.md) | API reference | GUIDE_15_API |
-| [REF_35_REVIEW.md](REF_35_REVIEW.md) | Review summary and status | GUIDE_35_REVIEW |
-| [REF_51_TEST.md](REF_51_TEST.md) | Test status and coverage | GUIDE_51_TEST |
+| Document | Purpose |
+|----------|---------|
+| [REF_22_PROJECT.md](REF_22_PROJECT.md) | Project goals, scope, and status |
+| [REF_13_ARCH.md](REF_13_ARCH.md) | Current architecture and boundaries |
+| [REF_15_API.md](REF_15_API.md) | Public API/features and operational endpoints |
+| [REF_51_TEST.md](REF_51_TEST.md) | Test strategy and coverage layers |
+| [REF_35_REVIEW.md](REF_35_REVIEW.md) | Review/status notes |
 
 ## Usage
 
 | Document | Purpose |
 |----------|---------|
-| [GUIDE_01_USAGE.md](GUIDE_01_USAGE.md) | How to use xwapi (GUIDE_41_DOCS) |
+| [GUIDE_01_USAGE.md](GUIDE_01_USAGE.md) | Practical usage patterns and examples |
 
-## Other
+## Evidence and logs
+
+| Path | Content |
+|------|---------|
+| [tests/](tests/) | Test summary reports (`TEST_*`) |
+| [logs/tests/](logs/tests/) | Historical test execution evidence |
+| [logs/reviews/](logs/reviews/) | Review evidence |
+
+## Archive
 
 | Path | Purpose |
 |------|---------|
-| [_archive/](_archive/) | PROJECT_PHASES, ENGINE_ROADMAP, FUTURE_PLANS, FILE_ANALYSIS (value in REF_22, REF_13) |
-
-## Evidence (logs)
-
-| Location | Content |
-|----------|---------|
-| [logs/reviews/](logs/reviews/) | REVIEW_* (GUIDE_35_REVIEW) |
-| [logs/tests/](logs/tests/) | TEST_* (test run evidence) |
-
-## Standards
-
-- Only `README.md` at repo root; all other Markdown under `docs/` (GUIDE_41_DOCS).
-
----
-
-*Per GUIDE_00_MASTER and GUIDE_41_DOCS.*
+| [_archive/](_archive/) | Historical planning and roadmap artifacts |

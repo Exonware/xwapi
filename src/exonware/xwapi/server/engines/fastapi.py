@@ -5,26 +5,29 @@ FastAPI-based API server engine using XWAction's FastAPIActionEngine.
 Company: eXonware.com
 Author: eXonware Backend Team
 Email: connect@exonware.com
-Version: 0.0.1.1
+Version: 0.0.1.2
 """
 
 from typing import Any, Optional
 from datetime import datetime, timezone
-from fastapi import FastAPI, Query, Depends
+from fastapi import FastAPI, Query, Depends, HTTPException
+from fastapi.exceptions import RequestValidationError
 from fastapi.openapi.utils import get_openapi
+from starlette.responses import JSONResponse
 import uvicorn
 from exonware.xwaction.engines.fastapi import FastAPIActionEngine
 from exonware.xwapi.errors import (
     XWAPIError,
+    ValidationError,
     InternalError,
     get_trace_id,
-    create_error_response,
-    get_http_status_code,
-    error_to_http_response,
-    get_error_headers,
+    http_status_to_xwapi_error,
+    xwapi_error_to_http_parts,
 )
 # Query parameter parsing - use XWQuery directly, no need for QueryParams class
 from exonware.xwapi.version import __version__
+from exonware.xwapi.server.http import starlette_json_response_from_xwapi_error
+from exonware.xwapi.server.middleware.trace import trace_middleware
 from .http_base import AHttpServerEngineBase
 from .contracts import ProtocolType
 from exonware.xwapi.config import XWAPIConfig
@@ -85,33 +88,19 @@ async def xwapi_exception_handler(request: "fastapi.Request", exc: XWAPIError) -
     Returns:
         JSONResponse with uniform error shape
     """
-    from fastapi.responses import JSONResponse
-    # Use generic engine-agnostic utilities
-    error_response, status_code = error_to_http_response(exc, request=request)
     trace_id = get_trace_id(request)
     # Log error (structured logging)
-    try:
-        from exonware.xwsystem import get_logger
-        logger = get_logger(__name__)
-        logger.error(
-            f"API error: {exc.code} - {exc.message}",
-            extra={
-                "trace_id": trace_id,
-                "error_code": exc.code,
-                "path": request.url.path,
-                "method": request.method,
-                "details": exc.details,
-            }
-        )
-    except ImportError:
-        pass  # xwsystem not available
-    # Get standard error headers (engine-agnostic)
-    headers = get_error_headers(trace_id=trace_id)
-    return JSONResponse(
-        status_code=status_code,
-        content=error_response,
-        headers=headers,
+    logger.error(
+        f"API error: {exc.code} - {exc.message}",
+        extra={
+            "trace_id": trace_id,
+            "error_code": exc.code,
+            "path": request.url.path,
+            "method": request.method,
+            "details": exc.details,
+        }
     )
+    return starlette_json_response_from_xwapi_error(exc, request=request)
 async def http_exception_handler(request: "fastapi.Request", exc: "fastapi.HTTPException") -> "fastapi.responses.JSONResponse":
     """
     Handler for FastAPI HTTPException (FastAPI-specific).
@@ -122,22 +111,21 @@ async def http_exception_handler(request: "fastapi.Request", exc: "fastapi.HTTPE
     Returns:
         JSONResponse with uniform error shape
     """
-    from fastapi.responses import JSONResponse
-    trace_id = get_trace_id(request)
-    # Create XWAPIError from HTTPException
-    error = XWAPIError(
-        message=exc.detail,
-        code=f"HTTP_{exc.status_code}",
-        details={"status_code": exc.status_code},
+    message = str(exc.detail or "HTTP error")
+    error = http_status_to_xwapi_error(exc.status_code, message)
+    body, _, headers = xwapi_error_to_http_parts(error, request=request)
+    # Preserve original framework status for HTTPException passthrough.
+    return JSONResponse(status_code=exc.status_code, content=body, headers=headers)
+
+
+async def request_validation_exception_handler(request: "fastapi.Request", exc: RequestValidationError) -> "fastapi.responses.JSONResponse":
+    """Convert FastAPI validation errors into unified XWAPI format."""
+    error = ValidationError(
+        message="Request validation failed",
+        details={"errors": exc.errors()},
+        hint="Ensure request payload and parameters match endpoint schema",
     )
-    # Use generic engine-agnostic utilities
-    error_response, _ = error_to_http_response(error, request=request)
-    headers = get_error_headers(trace_id=trace_id)
-    return JSONResponse(
-        status_code=exc.status_code,
-        content=error_response,
-        headers=headers,
-    )
+    return starlette_json_response_from_xwapi_error(error, request=request)
 async def generic_exception_handler(request: "fastapi.Request", exc: Exception) -> "fastapi.responses.JSONResponse":
     """
     Handler for unhandled exceptions (FastAPI-specific).
@@ -148,7 +136,6 @@ async def generic_exception_handler(request: "fastapi.Request", exc: Exception) 
     Returns:
         JSONResponse with uniform error shape
     """
-    from fastapi.responses import JSONResponse
     trace_id = get_trace_id(request)
     # Classify error type for better error messages
     error_type = type(exc).__name__
@@ -186,28 +173,17 @@ async def generic_exception_handler(request: "fastapi.Request", exc: Exception) 
             hint="Check server logs for details",
         )
     # Use generic engine-agnostic utilities
-    error_response, status_code = error_to_http_response(error, request=request)
     trace_id = get_trace_id(request)
-    headers = get_error_headers(trace_id=trace_id)
     # Log error
-    try:
-        from exonware.xwsystem import get_logger
-        logger = get_logger(__name__)
-        logger.exception(
-            f"Unhandled exception: {type(exc).__name__}",
-            extra={
-                "trace_id": trace_id,
-                "path": request.url.path,
-                "method": request.method,
-            }
-        )
-    except ImportError:
-        pass  # xwsystem not available
-    return JSONResponse(
-        status_code=status_code,
-        content=error_response,
-        headers=headers,
+    logger.exception(
+        f"Unhandled exception: {type(exc).__name__}",
+        extra={
+            "trace_id": trace_id,
+            "path": request.url.path,
+            "method": request.method,
+        }
     )
+    return starlette_json_response_from_xwapi_error(error, request=request)
 
 
 class FastAPIServerEngine(AHttpServerEngineBase):
@@ -255,7 +231,11 @@ class FastAPIServerEngine(AHttpServerEngineBase):
             logger.debug(f"Applied {len(config.openapi_tags)} OpenAPI tags")
         # Register global exception handlers
         app.add_exception_handler(XWAPIError, xwapi_exception_handler)
+        app.add_exception_handler(HTTPException, http_exception_handler)
+        app.add_exception_handler(RequestValidationError, request_validation_exception_handler)
         app.add_exception_handler(Exception, generic_exception_handler)
+        # Install request trace correlation middleware for all routes.
+        app.middleware("http")(trace_middleware)
         # Fix middleware structure if needed (workaround for middleware format issues)
         # FastAPI expects user_middleware to contain tuples of (cls, options) with exactly 2 elements
         # Some engines may add middleware incorrectly, causing "too many values to unpack" errors
@@ -474,16 +454,20 @@ class FastAPIServerEngine(AHttpServerEngineBase):
         # Add remaining kwargs
         uvicorn_kwargs.update(kwargs)
         logger.info(f"Starting FastAPI server on {host}:{port}")
-        # On Windows, explicitly prevent uvloop from being used
-        # Create Config explicitly to ensure loop parameter is respected
+        config = uvicorn.Config(app, **uvicorn_kwargs)
         if sys.platform == "win32":
-            # Import uvicorn Config to explicitly set loop
-            import uvicorn
-            config = uvicorn.Config(app, **uvicorn_kwargs)
-            # Force asyncio loop on Windows (uvloop doesn't work on Windows)
             config.loop = "asyncio"
-            server = uvicorn.Server(config)
-            server.run()
-        else:
-            # Use standard uvicorn.run() on Unix (will use uvloop if available)
-            uvicorn.run(app, **uvicorn_kwargs)
+        server = uvicorn.Server(config)
+        if hasattr(app, "state"):
+            app.state.xwapi_uvicorn_server = server
+        server.run()
+
+    def stop_server(self, app: FastAPI) -> None:
+        """Stop a running FastAPI uvicorn server if it is tracked on app state."""
+        server = None
+        if hasattr(app, "state"):
+            server = getattr(app.state, "xwapi_uvicorn_server", None)
+        if server is None:
+            logger.warning("No tracked uvicorn server found on FastAPI app state")
+            return
+        server.should_exit = True

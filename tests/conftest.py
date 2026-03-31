@@ -13,10 +13,23 @@ from pathlib import Path
 
 
 def _add_monorepo_paths() -> None:
-    """Add sibling packages (xwaction, xwsystem, etc.) to path for pytest process (GUIDE_TEST)."""
+    """Add sibling packages to path for pytest subprocess (run_pytest does not inherit parent sys.path)."""
     root = Path(__file__).resolve().parent.parent
     monorepo = root.parent
-    for pkg in ("xwapi", "xwsystem", "xwsyntax", "xwquery", "xwaction", "xwentity", "xwauth", "xwstorage", "xwschema"):
+    for pkg in (
+        "xwaction",
+        "xwapi",
+        "xwauth",
+        "xwdata",
+        "xwentity",
+        "xwjson",
+        "xwnode",
+        "xwquery",
+        "xwschema",
+        "xwstorage",
+        "xwsyntax",
+        "xwsystem",
+    ):
         src = monorepo / pkg / "src"
         if src.is_dir() and str(src) not in sys.path:
             sys.path.insert(0, str(src))

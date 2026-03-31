@@ -1,45 +1,74 @@
 # Architecture Reference — xwapi
 
 **Library:** exonware-xwapi  
-**Last Updated:** 07-Feb-2026
-
-Architecture and design (output of GUIDE_13_ARCH). Per REF_35_REVIEW.
-
----
+**Last Updated:** 31-Mar-2026
 
 ## Overview
 
-xwapi provides the **API layer**: server and engine abstraction, middleware pipeline, OpenAPI generation, and integration with xwquery, serialization, and xwaction. It does not implement auth or storage itself; it delegates to xwauth and xwstorage where required.
+`xwapi` is the API orchestration layer in eXonware. It provides:
 
----
+- engine-agnostic app/server abstractions
+- route and action registration via `xwaction`
+- entity-driven endpoint generation (`xwentity`)
+- transport-neutral error model with framework adapters
+- middleware pipeline (trace/tenant/rate-limit/auth/observability/pause/admin/API-token)
+- operational admin endpoints
+- outbox + singleton worker action pipeline
+- API token lifecycle and usage metering with provider contracts
 
-## Boundaries
+## Architectural layers
 
-- **Public API:** Server/engine facades; API routes and middleware registration.
-- **Servers / engines:** Pluggable server implementations (e.g. ASGI/WSGI); engine types for different runtimes.
-- **Middleware:** Request/response pipeline; auth, logging, validation hooks.
-- **OpenAPI:** Generation from routes and schemas; documentation and client tooling.
-- **Query / serialization:** Delegation to xwquery and xwsystem serialization.
+1. **Facade/API layer**
+   - `XWAPI`
+   - OpenAPI generation and app creation
+2. **Server/runtime layer**
+   - `XWApiServer`
+   - action registration, operational lifecycle, status/health
+3. **Middleware layer**
+   - request guards, observability, auth, pause, API token metering
+4. **Pipeline layer**
+   - `AOutboxStore`, `InMemoryOutboxStore`
+   - `BackgroundWorker` (singleton-per-process)
+   - `ActionPipelineManager`
+5. **Token/billing layer**
+   - `APITokenManager`
+   - provider contracts: `IAuthProvider`, `IStorageProvider`, `IPaymentProvider`
+6. **Provider adapters**
+   - local/in-memory adapters and library-backed adapters (`xwauth`, `xwstorage`)
 
----
+## Engine and protocol agnosticism
 
-## Layering
+- Core errors are represented as `XWAPIError` variants.
+- Mapping to HTTP responses is handled by adapters (`xwapi_error_to_http_parts`, Starlette response adapter).
+- Middleware and request/response handling avoid unnecessary engine-specific coupling where possible.
 
-1. **Facade:** High-level API and server bootstrap.
-2. **Engines:** Runtime-specific engine implementations.
-3. **Middleware:** Ordered middleware stack.
-4. **Routes:** Endpoint registration and OpenAPI exposure.
+## Outbox + worker model
 
----
+- API thread enqueues jobs through outbox abstraction.
+- Single worker instance claims and executes jobs.
+- Retries, leasing, dead-letter transitions, and safe stop behavior are included in runtime behavior and tests.
 
-## Delegation
+## Token management architecture
 
-- **xwauth:** Authentication and authorization for protected routes.
-- **xwstorage:** Storage operations when API exposes storage-backed resources.
-- **xwquery:** Query execution when API exposes query endpoints.
-- **xwaction:** Action/workflow decoration and validation.
-- **xwsystem:** Serialization and utilities.
+- Token identity and metadata storage are abstracted through providers.
+- Usage metering supports idempotency keys to avoid duplicate debit.
+- Scope checks are optional and route-driven in API token middleware.
+- Recharge/balance capabilities are delegated to payment provider interface.
 
----
+## Dependencies and reuse
 
-*See ENGINE_ROADMAP.md and PROJECT_PHASES.md for roadmap. Requirements: REF_22_PROJECT.md.*
+`xwapi` intentionally reuses:
+
+- `xwsystem` (logging/serialization/core utils)
+- `xwaction` (registration/execution contracts)
+- `xwentity` (entity model surface)
+- `xwschema` (schema and validation integration points)
+- `xwdata` (data-format/serialization integration points)
+
+## Notable runtime controls (env)
+
+- `XWAPI_ENV`
+- `XWAPI_ADMIN_TOKEN`
+- `XWAPI_ADMIN_PROTECT_READ`
+- `XWAPI_ALLOW_INSECURE_ADMIN`
+- `XWAPI_API_TOKEN_MIDDLEWARE`

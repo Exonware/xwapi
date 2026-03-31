@@ -7,14 +7,14 @@ Validates tokens and injects user context into request state.
 Company: eXonware.com
 Author: eXonware Backend Team
 Email: connect@exonware.com
-Version: 0.0.1.1
+Version: 0.0.1.2
 """
 
 from typing import Callable, Optional, Any
-from fastapi import Request, Response, HTTPException, status, Depends
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-# Security scheme
-security = HTTPBearer(auto_error=False)
+from starlette.requests import Request
+from starlette.responses import Response
+from starlette.exceptions import HTTPException
+from starlette import status
 async def auth_middleware(
     request: Request,
     call_next: Callable,
@@ -97,6 +97,17 @@ def require_auth_dependency(auth_provider: Optional[Any] = None):
     Returns:
         Dependency function
     """
+    try:
+        from fastapi import Depends
+        from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+    except ImportError as exc:
+        raise RuntimeError(
+            "require_auth_dependency requires FastAPI. "
+            "Install the fastapi engine extras to use route-level dependency auth."
+        ) from exc
+
+    security = HTTPBearer(auto_error=False)
+
     async def get_current_user(
         request: Request,
         credentials: Optional[HTTPAuthorizationCredentials] = Depends(security)

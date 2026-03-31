@@ -4,7 +4,7 @@ Contracts (interfaces and enums) for xwapi library.
 Company: eXonware.com
 Author: eXonware Backend Team
 Email: connect@exonware.com
-Version: 0.0.1.1
+Version: 0.0.1.2
 """
 
 from typing import Protocol, runtime_checkable, Any
@@ -106,6 +106,94 @@ class IApiServer(Protocol):
 
     def restart(self) -> None:
         """Restart the API server."""
+        ...
+
+
+@runtime_checkable
+class IEntityCrudStore(Protocol):
+    """Interface for entity CRUD storage backends."""
+
+    async def list_items(self, collection: str) -> list[dict[str, Any]]:
+        """List all items in a collection."""
+        ...
+
+    async def get_item(self, collection: str, entity_id: str) -> dict[str, Any] | None:
+        """Get a single item by ID."""
+        ...
+
+    async def put_item(self, collection: str, entity_id: str, item: dict[str, Any]) -> None:
+        """Create or replace an item."""
+        ...
+
+    async def delete_item(self, collection: str, entity_id: str) -> bool:
+        """Delete an item and return whether it existed."""
+        ...
+
+
+@runtime_checkable
+class IAuthProvider(Protocol):
+    """Provider contract for API token lifecycle using auth library backends."""
+
+    async def issue_api_token(
+        self,
+        *,
+        subject_id: str,
+        name: str,
+        scopes: list[str],
+        expires_in_seconds: int | None = None,
+        metadata: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        ...
+
+    async def verify_api_token(self, token: str) -> dict[str, Any] | None:
+        ...
+
+    async def revoke_api_token(self, token_id: str) -> bool:
+        ...
+
+
+@runtime_checkable
+class IStorageProvider(Protocol):
+    """Provider contract for persistence backends (xwstorage-compatible)."""
+
+    async def read(self, key: str) -> Any:
+        ...
+
+    async def write(self, key: str, value: Any) -> None:
+        ...
+
+    async def delete(self, key: str) -> None:
+        ...
+
+    async def exists(self, key: str) -> bool:
+        ...
+
+
+@runtime_checkable
+class IPaymentProvider(Protocol):
+    """Provider contract for recharge/billing operations."""
+
+    async def create_recharge(
+        self,
+        *,
+        subject_id: str,
+        amount: float,
+        currency: str = "USD",
+        metadata: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        ...
+
+    async def get_balance(self, subject_id: str) -> float:
+        ...
+
+    async def consume_credits(
+        self,
+        *,
+        subject_id: str,
+        amount: float,
+        metadata: dict[str, Any] | None = None,
+        idempotency_key: str | None = None,
+    ) -> dict[str, Any]:
         ...
 
 

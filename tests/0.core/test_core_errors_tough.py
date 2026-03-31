@@ -25,7 +25,10 @@ from exonware.xwapi.errors import (
     EntityMappingError,
     OAuth2ConfigurationError,
     EndpointConfigurationError,
+    ServicePausedError,
     create_error_response,
+    http_status_to_xwapi_error,
+    xwapi_error_to_http_parts,
     get_http_status_code,
     get_trace_id,
     error_to_http_response,
@@ -247,13 +250,14 @@ def test_create_error_response_with_all_error_types():
 
 def test_get_http_status_code_for_all_errors():
     """Test HTTP status code mapping for all error types."""
-    from exonware.xwapi.errors import HTTP_400_BAD_REQUEST, HTTP_401_UNAUTHORIZED, HTTP_403_FORBIDDEN, HTTP_404_NOT_FOUND, HTTP_429_TOO_MANY_REQUESTS, HTTP_500_INTERNAL_SERVER_ERROR
+    from exonware.xwapi.errors import HTTP_400_BAD_REQUEST, HTTP_401_UNAUTHORIZED, HTTP_403_FORBIDDEN, HTTP_404_NOT_FOUND, HTTP_429_TOO_MANY_REQUESTS, HTTP_500_INTERNAL_SERVER_ERROR, HTTP_503_SERVICE_UNAVAILABLE
     test_cases = [
         (ValidationError("Test"), HTTP_400_BAD_REQUEST),
         (AuthenticationError("Test"), HTTP_401_UNAUTHORIZED),
         (AuthorizationError("Test"), HTTP_403_FORBIDDEN),
         (NotFoundError("Test"), HTTP_404_NOT_FOUND),
         (RateLimitError("Test"), HTTP_429_TOO_MANY_REQUESTS),
+        (ServicePausedError("Test"), HTTP_503_SERVICE_UNAVAILABLE),
         (InternalError("Test"), HTTP_500_INTERNAL_SERVER_ERROR),
     ]
     for error, expected_status in test_cases:
@@ -489,6 +493,33 @@ def test_get_http_status_code_edge_cases():
     status = get_http_status_code(error)
     assert isinstance(status, int)
     assert 400 <= status <= 599
+
+
+@pytest.mark.xwapi_core
+def test_http_status_to_xwapi_error_mapping():
+    """HTTP status adapter should map to canonical xwapi error hierarchy."""
+    assert type(http_status_to_xwapi_error(404, "missing")).__name__ == "NotFoundError"
+    assert type(http_status_to_xwapi_error(401, "unauth")).__name__ == "AuthenticationError"
+    assert type(http_status_to_xwapi_error(403, "forbidden")).__name__ == "AuthorizationError"
+    assert type(http_status_to_xwapi_error(429, "rate")).__name__ == "RateLimitError"
+    assert type(http_status_to_xwapi_error(422, "bad")).__name__ == "ValidationError"
+    fallback = http_status_to_xwapi_error(418, "teapot")
+    assert fallback.code == "HTTP_418"
+
+
+@pytest.mark.xwapi_core
+def test_xwapi_error_to_http_parts_includes_headers_and_status():
+    """Engine-agnostic response parts helper should compose body/status/headers."""
+    error = ValidationError("bad payload", details={"field": "name"})
+    body, status, headers = xwapi_error_to_http_parts(
+        error,
+        request=None,
+        extra_headers={"Retry-After": "1"},
+    )
+    assert status == 400
+    assert body["code"] == "ValidationError"
+    assert body["message"] == "bad payload"
+    assert headers["Retry-After"] == "1"
 @pytest.mark.xwapi_core
 
 def test_error_with_none_in_details():

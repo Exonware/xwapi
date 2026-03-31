@@ -5,7 +5,7 @@ gRPC-based API server engine using Protocol Buffers.
 Company: eXonware.com
 Author: eXonware Backend Team
 Email: connect@exonware.com
-Version: 0.0.1.1
+Version: 0.0.1.2
 """
 
 from typing import Any, Optional
@@ -17,7 +17,7 @@ import importlib.util
 import inspect
 from .base import AApiServerEngineBase
 from .contracts import ProtocolType
-from ..config import XWAPIConfig
+from exonware.xwapi.config import XWAPIConfig
 from exonware.xwsystem import get_logger
 logger = get_logger(__name__)
 

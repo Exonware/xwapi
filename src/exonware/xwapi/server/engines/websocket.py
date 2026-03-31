@@ -5,13 +5,13 @@ WebSocket-based API server engine using FastAPI WebSocket support.
 Company: eXonware.com
 Author: eXonware Backend Team
 Email: connect@exonware.com
-Version: 0.0.1.1
+Version: 0.0.1.2
 """
 
 from typing import Any, Optional
 from .http_base import AHttpServerEngineBase
 from .contracts import ProtocolType
-from ..config import XWAPIConfig
+from exonware.xwapi.config import XWAPIConfig
 from exonware.xwsystem import get_logger
 logger = get_logger(__name__)
 
@@ -49,7 +49,7 @@ class WebSocketServerEngine(AHttpServerEngineBase):
         """
         from fastapi import FastAPI
         # Use FastAPIServerEngine logic for base app creation
-        from exonware.xwapi.engines.fastapi import FastAPIServerEngine
+        from exonware.xwapi.server.engines.fastapi import FastAPIServerEngine
         fastapi_engine = FastAPIServerEngine()
         app = fastapi_engine.create_app(config)
         self._app = app

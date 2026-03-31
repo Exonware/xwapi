@@ -8,17 +8,11 @@ Engine-specific OpenAPI export is handled by engine implementations.
 Company: eXonware.com
 Author: eXonware Backend Team
 Email: connect@exonware.com
-Version: 0.0.1.1
+Version: 0.0.1.2
 """
 
-from typing import Any, Optional, TYPE_CHECKING
+from typing import Any, Optional
 from pathlib import Path
-# Engine-specific imports deferred - use TYPE_CHECKING for type hints only
-if TYPE_CHECKING:
-    from fastapi import FastAPI
-else:
-    # Runtime imports deferred - will import when needed for engine-specific operations
-    FastAPI = None
 
 
 def merge_openapi_schemas(schemas: list[dict[str, Any]]) -> dict[str, Any]:
@@ -120,18 +114,12 @@ def export_openapi_schema(
     Returns:
         OpenAPI schema as string (YAML/XML/etc.) or dict (JSON)
     """
-    # Detect engine from app type (engine-agnostic pattern)
     app_type_name = type(app).__module__ + "." + type(app).__name__
-    # Extract schema based on engine type
-    if "fastapi" in app_type_name.lower():
-        # FastAPI-specific schema extraction
+    # Extract schema via capability-based detection.
+    if hasattr(app, "openapi"):
         schema = app.openapi()
     else:
-        # For other engines, delegate to engine-specific implementation
-        # Try to get schema via common interface
-        if hasattr(app, "openapi"):
-            schema = app.openapi()
-        elif hasattr(app, "generate_openapi"):
+        if hasattr(app, "generate_openapi"):
             schema = app.generate_openapi()
         else:
             raise NotImplementedError(f"OpenAPI schema extraction not implemented for engine type: {app_type_name}")

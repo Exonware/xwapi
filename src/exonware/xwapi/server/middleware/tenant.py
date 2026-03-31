@@ -7,11 +7,14 @@ Enforces tenant isolation at the middleware level.
 Company: eXonware.com
 Author: eXonware Backend Team
 Email: connect@exonware.com
-Version: 0.0.1.1
+Version: 0.0.1.2
 """
 
 from typing import Callable, Optional
-from fastapi import Request, Response, HTTPException, status
+from starlette.requests import Request
+from starlette.responses import Response
+from starlette.exceptions import HTTPException
+from starlette import status
 async def tenant_middleware(request: Request, call_next: Callable) -> Response:
     """
     Multi-tenant middleware.

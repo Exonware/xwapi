@@ -5,7 +5,7 @@ Strategy pattern implementation for pluggable API server engines.
 Company: eXonware.com
 Author: eXonware Backend Team
 Email: connect@exonware.com
-Version: 0.0.1.1
+Version: 0.0.1.2
 """
 
 from __future__ import annotations
@@ -61,10 +61,14 @@ class ApiServerEngineRegistry:
 
     def get_all_engines(self) -> dict[str, IApiServerEngine]:
         """Get all registered engines."""
+        if not self._engines:
+            self._auto_register_engines()
         return self._engines.copy()
 
     def list_engines(self) -> list[str]:
         """List all registered engine names."""
+        if not self._engines:
+            self._auto_register_engines()
         return list(self._engines.keys())
 
     def set_default(self, name: str) -> bool:

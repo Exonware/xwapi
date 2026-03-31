@@ -7,13 +7,16 @@ Returns standard rate limit headers.
 Company: eXonware.com
 Author: eXonware Backend Team
 Email: connect@exonware.com
-Version: 0.0.1.1
+Version: 0.0.1.2
 """
 
 from typing import Callable, Optional
 from datetime import datetime, timedelta, timezone
 from collections import defaultdict
-from fastapi import Request, Response, HTTPException, status
+from starlette.requests import Request
+from starlette.responses import Response
+from starlette.exceptions import HTTPException
+from starlette import status
 # Simple in-memory rate limiter (production should use Redis)
 _rate_limit_storage: dict[str, list[datetime]] = defaultdict(list)
 

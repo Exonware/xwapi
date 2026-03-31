@@ -57,3 +57,10 @@ xwlazy_sbom.toml
 .secrets
 
 .examples/
+
+# Local private folders
+.secrets
+.references
+.venv
+.archive
+

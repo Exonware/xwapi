@@ -12,10 +12,13 @@ Version: 0.0.1.0
 from __future__ import annotations
 import pytest
 from unittest.mock import Mock, MagicMock, patch
+from fastapi.testclient import TestClient
 from exonware.xwapi.server.engines.fastapi import FastAPIServerEngine
 from exonware.xwapi.config import XWAPIConfig
 from exonware.xwapi.server.engines.contracts import ProtocolType
 from exonware.xwapi.errors import XWAPIError, FastAPICreationError
+from fastapi import HTTPException
+from fastapi.exceptions import RequestValidationError
 @pytest.mark.xwapi_unit
 
 def test_fastapi_engine_with_none_config():
@@ -82,6 +85,8 @@ def test_fastapi_engine_exception_handlers_registration():
     app = engine.create_app(config)
     from exonware.xwapi.errors import XWAPIError
     assert XWAPIError in app.exception_handlers
+    assert HTTPException in app.exception_handlers
+    assert RequestValidationError in app.exception_handlers
     assert Exception in app.exception_handlers
 @pytest.mark.xwapi_unit
 
@@ -297,6 +302,19 @@ def test_fastapi_engine_start_server_with_kwargs():
         # On Unix, uvicorn.run() is called; on Windows, uvicorn.Server() is used
         # Verify that at least one was called
         assert mock_run.called or mock_server_class.called
+
+
+@pytest.mark.xwapi_unit
+def test_fastapi_engine_stop_server_sets_should_exit():
+    """stop_server should set should_exit on tracked uvicorn server."""
+    engine = FastAPIServerEngine()
+    config = XWAPIConfig(title="Stop Test")
+    app = engine.create_app(config)
+    app.state.xwapi_uvicorn_server = MagicMock(should_exit=False)
+
+    engine.stop_server(app)
+
+    assert app.state.xwapi_uvicorn_server.should_exit is True
 @pytest.mark.xwapi_unit
 
 def test_fastapi_engine_openapi_metadata():
@@ -479,3 +497,59 @@ def test_fastapi_engine_with_complex_openapi_config():
     schema = app.openapi()
     assert schema["info"]["title"] == "Complex API"
     assert schema["info"]["version"] == "1.2.3-beta.4"
+
+
+@pytest.mark.xwapi_unit
+def test_fastapi_engine_http_exception_returns_uniform_shape():
+    """HTTPException should be transformed into uniform xwapi error body."""
+    engine = FastAPIServerEngine()
+    app = engine.create_app(XWAPIConfig(title="Error Shape"))
+
+    @app.get("/explode")
+    def explode():
+        raise HTTPException(status_code=404, detail="missing")
+
+    client = TestClient(app, raise_server_exceptions=False)
+    response = client.get("/explode")
+    body = response.json()
+    assert response.status_code == 404
+    assert body["code"] in {"NotFoundError", "HTTP_404"}
+    assert body["message"] == "missing"
+    assert "trace_id" in body
+
+
+@pytest.mark.xwapi_unit
+def test_fastapi_engine_validation_error_returns_uniform_shape():
+    """Request validation errors should use xwapi response format."""
+    engine = FastAPIServerEngine()
+    app = engine.create_app(XWAPIConfig(title="Validation Shape"))
+
+    @app.get("/items/{item_id}")
+    def get_item(item_id: int):
+        return {"item_id": item_id}
+
+    client = TestClient(app, raise_server_exceptions=False)
+    response = client.get("/items/not-an-int")
+    body = response.json()
+    assert response.status_code == 400
+    assert body["code"] == "ValidationError"
+    assert "trace_id" in body
+
+
+@pytest.mark.xwapi_unit
+def test_fastapi_engine_generic_exception_returns_uniform_shape():
+    """Unhandled exceptions should return unified internal error contract."""
+    engine = FastAPIServerEngine()
+    app = engine.create_app(XWAPIConfig(title="Generic Error Shape"))
+
+    @app.get("/boom")
+    def boom():
+        raise RuntimeError("boom")
+
+    client = TestClient(app, raise_server_exceptions=False)
+    response = client.get("/boom")
+    body = response.json()
+    assert response.status_code == 500
+    assert body["code"] in {"InternalError", "ConnectionError", "TemplateError"}
+    assert "trace_id" in body
+    assert response.headers.get("X-Trace-Id") == body["trace_id"]
