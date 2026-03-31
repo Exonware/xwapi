@@ -1,0 +1,30 @@
+# xWLazy Requirements - Marker Package & Wrapper
+# Version: see src/exonware/xwlazy/version.py
+# xwlazy is a zero-footprint marker; Python 3.8+. Usage: pip install -r requirements.txt
+
+# =============================================================================
+# RUNTIME DEPENDENCIES
+# =============================================================================
+# Source size (src/*): ~348.9 KB
+pip
+
+# Dev tools: pip install -e ".[dev]"
+cachebox
+cachetools
+pylru
+msgspec
+orjson
+hyperlight_hyperjson
+json5
+PyYAML
+tomli-w
+xmltodict
+dicttoxml
+msgpack
+cbor2
+pymongo
+httpx
+brotli
+zstandard
+rich
+attrs

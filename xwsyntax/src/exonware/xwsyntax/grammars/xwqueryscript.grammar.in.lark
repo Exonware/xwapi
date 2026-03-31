@@ -1,0 +1,623 @@
+// XWQueryScript Grammar for Lark
+// Universal Query Language - Core Operations
+// Simplified for LALR parsing
+
+?start: statement
+
+// Main statement types
+statement: select_stmt
+         | insert_stmt
+         | update_stmt
+         | delete_stmt
+         | create_stmt
+         | drop_stmt
+         | describe_stmt
+         | load_stmt
+         | store_stmt
+         | merge_stmt
+         | alter_stmt
+         | with_stmt
+         | match_stmt
+         | action_stmt
+
+// Generic action statement to support the full XWQuery action surface.
+action_stmt: action_member action_args?
+
+action_member: TRUNCATE
+             | UPSERT
+             | EXPLAIN
+             | FILTER
+             | TERM
+             | RANGE
+             | OPTIONAL
+             | EXISTS
+             | NOT_IN
+             | IS_NULL
+             | CONTAINS
+             | STARTS_WITH
+             | ENDS_WITH
+             | REGEX
+             | FUZZY
+             | IS_MISSING
+             | ANY_MATCH
+             | ALL_MATCH
+             | SUMMARIZE
+             | COLLECT
+             | REDUCE
+             | STDDEV
+             | VARIANCE
+             | MEDIAN
+             | PERCENTILE
+             | FIRST_VALUE
+             | LAST_VALUE
+             | GROUP_CONCAT
+             | PATH
+             | OUT
+             | IN_TRAVERSE
+             | ALL_PATHS
+             | ALL_SHORTEST_PATHS
+             | ALL_SIMPLE_PATHS
+             | BOTH
+             | BOTHE
+             | BOTHV
+             | INE
+             | INV
+             | OUTE
+             | OUTV
+             | CLONE
+             | CONNECTED_COMPONENTS
+             | CYCLE_DETECTION
+             | CREATE_EDGE
+             | DELETE_EDGE
+             | DETACH_DELETE
+             | UPDATE_EDGE
+             | DEGREE
+             | EXPAND
+             | EXTRACT_PATH
+             | NEIGHBORS
+             | PATH_LENGTH
+             | PROPERTIES
+             | SHORTEST_PATH
+             | SIMPLE_PATH
+             | SUBGRAPH
+             | TRAVERSAL
+             | VARIABLE_PATH
+             | REPEAT
+             | COALESCE_STEP
+             | CHOOSE
+             | ADD_VERTEX
+             | DROP_VERTEX
+             | PAGE_RANK
+             | PROJECT
+             | EXTEND
+             | FILE_SOURCE
+             | IMPORT
+             | EXPORT
+             | COPY
+             | BULK_WRITE
+             | SLICING
+             | INDEXING
+             | UNWIND
+             | FLATTEN
+             | ARRAY_LENGTH
+             | ARRAY_CONTAINS
+             | ARRAY_SORT
+             | ARRAY_REVERSE
+             | ARRAY_CONCAT
+             | ARRAY_DISTINCT
+             | PUSH
+             | POP
+             | INCLUDE
+             | UNION
+             | MINUS
+             | PIPE
+             | LET
+             | FOR
+             | FOREACH
+             | ASK
+             | SUBSCRIBE
+             | SUBSCRIPTION
+             | MUTATION
+             | OPTIONS
+             | CONSTRUCT
+             | AGGREGATE
+             | INTERSECT
+             | SUBQUERY
+             | PIVOT
+             | UNPIVOT
+             | ROW_NUMBER
+             | RANK
+             | DENSE_RANK
+             | RECURSIVE_CTE
+             | CASE
+             | COALESCE
+             | NULLIF
+             | IF_EXPR
+             | SWITCH
+             | CONCAT
+             | SUBSTRING
+             | UPPER
+             | LOWER
+             | TRIM
+             | REPLACE_STR
+             | SPLIT
+             | LENGTH
+             | LPAD
+             | RPAD
+             | REVERSE_STR
+             | POSITION
+             | REPEAT_STR
+             | REGEX_EXTRACT
+             | REGEX_REPLACE
+             | ABS
+             | CEIL
+             | FLOOR
+             | ROUND
+             | POWER
+             | SQRT
+             | MOD
+             | LOG
+             | EXP
+             | SIGN
+             | RANDOM
+             | GREATEST
+             | LEAST
+             | TRUNC
+             | NOW
+             | DATE_ADD
+             | DATE_DIFF
+             | EXTRACT_DATE
+             | DATE_FORMAT
+             | DATE_PARSE
+             | DATE_TRUNC
+             | INTERVAL
+             | UNIX_TIMESTAMP
+             | FROM_UNIXTIME
+             | CAST
+             | TYPEOF
+             | TRY_CAST
+             | TO_STRING
+             | TO_NUMBER
+             | TO_BOOLEAN
+             | TO_DATE
+             | IS_NUMBER
+             | IS_STRING
+             | RETURN
+             | BY
+             | OFFSET
+             | SET
+
+action_args: expression
+           | value_list
+           | object_literal
+           | IDENTIFIER ("," IDENTIFIER)*
+
+// SELECT statement
+select_stmt: SELECT select_list from_clause? where_clause? group_by_clause? having_clause? order_by_clause? limit_clause? window_clause?
+
+select_list: "*"
+           | select_item ("," select_item)*
+
+select_item: expression [AS IDENTIFIER]
+
+// FROM with joins
+from_clause: FROM table_ref (join_clause)*
+
+table_ref: IDENTIFIER [AS? IDENTIFIER]
+
+join_clause: join_type? JOIN IDENTIFIER [AS? IDENTIFIER] ON expression
+
+join_type: INNER | LEFT | RIGHT | FULL | CROSS
+
+// WHERE and FILTER
+where_clause: WHERE expression
+
+// Aggregation
+aggregate_function: COUNT "(" ("*" | DISTINCT? expression) ")"
+                  | SUM "(" DISTINCT? expression ")"
+                  | AVG "(" DISTINCT? expression ")"
+                  | MIN "(" expression ")"
+                  | MAX "(" expression ")"
+
+group_by_clause: GROUP BY expression ("," expression)*
+
+having_clause: HAVING expression
+
+// Ordering
+order_by_clause: ORDER BY order_item ("," order_item)*
+
+order_item: expression (ASC | DESC)?
+
+limit_clause: LIMIT NUMBER [OFFSET NUMBER]
+
+// Window
+window_clause: WINDOW OVER "(" (PARTITION BY expression ("," expression)*)? (ORDER BY order_item ("," order_item)*)? ")"
+
+// INSERT
+insert_stmt: INSERT INTO IDENTIFIER VALUES object_literal
+           | INSERT INTO IDENTIFIER "(" id_list ")" VALUES value_tuple_list
+
+id_list: IDENTIFIER ("," IDENTIFIER)*
+
+value_tuple_list: value_tuple ("," value_tuple)*
+
+value_tuple: "(" expression ("," expression)* ")"
+
+// UPDATE
+update_stmt: UPDATE IDENTIFIER SET assignment ("," assignment)* where_clause?
+
+assignment: IDENTIFIER "=" expression
+
+// DELETE
+delete_stmt: DELETE FROM IDENTIFIER where_clause?
+
+// CREATE
+create_stmt: CREATE object_type IDENTIFIER
+
+object_type: COLLECTION | TABLE | INDEX | VIEW | DATABASE
+
+// DROP
+drop_stmt: DROP object_type [IF EXISTS] IDENTIFIER
+
+// DESCRIBE
+describe_stmt: DESCRIBE IDENTIFIER
+
+// LOAD/STORE
+load_stmt: LOAD FROM STRING [INTO IDENTIFIER]
+
+store_stmt: STORE IDENTIFIER TO STRING
+
+// MERGE
+merge_stmt: MERGE IDENTIFIER WITH IDENTIFIER ON expression
+          | MERGE IDENTIFIER USING IDENTIFIER ON expression
+
+// ALTER
+alter_stmt: ALTER object_type IDENTIFIER alter_action
+
+alter_action: ADD column_def
+            | ADD COLUMN column_def
+            | DROP COLUMN IDENTIFIER
+            | MODIFY column_def
+
+column_def: IDENTIFIER data_type
+
+data_type: INT | VARCHAR | TEXT | FLOAT | DOUBLE | DECIMAL | DATE | DATETIME | TIMESTAMP | BOOLEAN | JSON
+
+// WITH (CTE)
+with_stmt: WITH cte ("," cte)* statement
+
+cte: IDENTIFIER AS "(" select_stmt ")"
+
+// MATCH (graph)
+match_stmt: MATCH pattern where_clause? RETURN return_list
+
+pattern: node_pattern (relationship node_pattern)*
+
+node_pattern: "(" [IDENTIFIER] [label] [props] ")"
+
+relationship: "-" "[" [IDENTIFIER] [rel_type] [props] "]" "->"
+            | "<-" "[" [IDENTIFIER] [rel_type] [props] "]" "-"
+
+label: ":" IDENTIFIER
+
+rel_type: ":" IDENTIFIER
+
+props: "{" prop_list "}"
+
+prop_list: prop_pair ("," prop_pair)*
+
+prop_pair: IDENTIFIER ":" expression
+
+return_list: return_item ("," return_item)*
+
+return_item: expression [AS IDENTIFIER]
+           | "*"
+
+// Expressions
+expression: or_expr
+
+or_expr: and_expr (OR and_expr)*
+
+and_expr: not_expr (AND not_expr)*
+
+not_expr: NOT? comparison
+
+comparison: additive [compare_op additive]
+          | additive LIKE STRING
+          | additive IN value_list
+          | additive BETWEEN additive AND additive
+          | additive HAS IDENTIFIER
+
+compare_op: "=" | "!=" | "<>" | "<" | ">" | "<=" | ">="
+
+additive: multiplicative (("+" | "-") multiplicative)*
+
+multiplicative: unary (("*" | "/" | "%") unary)*
+
+unary: ("+" | "-")? primary
+
+primary: literal
+       | column_ref
+       | function_call
+       | aggregate_function
+       | "(" expression ")"
+       | subquery
+       | array_literal
+       | object_literal
+
+// Column references
+column_ref: IDENTIFIER ("." IDENTIFIER)?
+
+// Function calls
+function_call: IDENTIFIER "(" [arg_list] ")"
+
+arg_list: expression ("," expression)*
+
+// Subquery
+subquery: "(" select_stmt ")"
+
+// Lists
+value_list: "(" expression ("," expression)* ")"
+          | "[" expression ("," expression)* "]"
+
+// Literals
+literal: STRING
+       | NUMBER
+       | BOOLEAN_LITERAL
+       | NULL
+
+array_literal: "[" [expression ("," expression)*] "]"
+
+object_literal: "{" [prop_pair ("," prop_pair)*] "}"
+
+// Keywords (case-insensitive)
+SELECT: "SELECT"i
+FROM: "FROM"i
+WHERE: "WHERE"i
+INSERT: "INSERT"i
+INTO: "INTO"i
+VALUES: "VALUES"i
+UPDATE: "UPDATE"i
+SET: "SET"i
+DELETE: "DELETE"i
+CREATE: "CREATE"i
+DROP: "DROP"i
+ALTER: "ALTER"i
+DESCRIBE: "DESCRIBE"i
+LOAD: "LOAD"i
+STORE: "STORE"i
+MERGE: "MERGE"i
+WITH: "WITH"i
+MATCH: "MATCH"i
+RETURN: "RETURN"i
+AS: "AS"i
+AND: "AND"i
+OR: "OR"i
+NOT: "NOT"i
+IN: "IN"i
+LIKE: "LIKE"i
+BETWEEN: "BETWEEN"i
+HAS: "HAS"i
+JOIN: "JOIN"i
+ON: "ON"i
+USING: "USING"i
+INNER: "INNER"i
+LEFT: "LEFT"i
+RIGHT: "RIGHT"i
+FULL: "FULL"i
+CROSS: "CROSS"i
+GROUP: "GROUP"i
+BY: "BY"i
+HAVING: "HAVING"i
+ORDER: "ORDER"i
+ASC: "ASC"i
+DESC: "DESC"i
+LIMIT: "LIMIT"i
+OFFSET: "OFFSET"i
+WINDOW: "WINDOW"i
+OVER: "OVER"i
+PARTITION: "PARTITION"i
+COUNT: "COUNT"i
+SUM: "SUM"i
+AVG: "AVG"i
+MIN: "MIN"i
+MAX: "MAX"i
+DISTINCT: "DISTINCT"i
+COLLECTION: "COLLECTION"i
+TABLE: "TABLE"i
+INDEX: "INDEX"i
+VIEW: "VIEW"i
+DATABASE: "DATABASE"i
+IF: "IF"i
+EXISTS: "EXISTS"i
+ADD: "ADD"i
+COLUMN: "COLUMN"i
+MODIFY: "MODIFY"i
+NULL: "NULL"i
+TO: "TO"i
+TRUNCATE: "TRUNCATE"i
+UPSERT: "UPSERT"i
+EXPLAIN: "EXPLAIN"i
+FILTER: "FILTER"i
+TERM: "TERM"i
+RANGE: "RANGE"i
+OPTIONAL: "OPTIONAL"i
+NOT_IN: "NOT_IN"i
+IS_NULL: "IS_NULL"i
+CONTAINS: "CONTAINS"i
+STARTS_WITH: "STARTS_WITH"i
+ENDS_WITH: "ENDS_WITH"i
+REGEX: "REGEX"i
+FUZZY: "FUZZY"i
+IS_MISSING: "IS_MISSING"i
+ANY_MATCH: "ANY_MATCH"i
+ALL_MATCH: "ALL_MATCH"i
+SUMMARIZE: "SUMMARIZE"i
+COLLECT: "COLLECT"i
+REDUCE: "REDUCE"i
+STDDEV: "STDDEV"i
+VARIANCE: "VARIANCE"i
+MEDIAN: "MEDIAN"i
+PERCENTILE: "PERCENTILE"i
+FIRST_VALUE: "FIRST_VALUE"i
+LAST_VALUE: "LAST_VALUE"i
+GROUP_CONCAT: "GROUP_CONCAT"i
+PATH: "PATH"i
+OUT: "OUT"i
+IN_TRAVERSE: "IN_TRAVERSE"i
+ALL_PATHS: "ALL_PATHS"i
+ALL_SHORTEST_PATHS: "ALL_SHORTEST_PATHS"i
+ALL_SIMPLE_PATHS: "ALL_SIMPLE_PATHS"i
+BOTH: "BOTH"i
+BOTHE: "BOTHE"i
+BOTHV: "BOTHV"i
+INE: "INE"i
+INV: "INV"i
+OUTE: "OUTE"i
+OUTV: "OUTV"i
+CLONE: "CLONE"i
+CONNECTED_COMPONENTS: "CONNECTED_COMPONENTS"i
+CYCLE_DETECTION: "CYCLE_DETECTION"i
+CREATE_EDGE: "CREATE_EDGE"i
+DELETE_EDGE: "DELETE_EDGE"i
+DETACH_DELETE: "DETACH_DELETE"i
+UPDATE_EDGE: "UPDATE_EDGE"i
+DEGREE: "DEGREE"i
+EXPAND: "EXPAND"i
+EXTRACT_PATH: "EXTRACT_PATH"i
+NEIGHBORS: "NEIGHBORS"i
+PATH_LENGTH: "PATH_LENGTH"i
+PROPERTIES: "PROPERTIES"i
+SHORTEST_PATH: "SHORTEST_PATH"i
+SIMPLE_PATH: "SIMPLE_PATH"i
+SUBGRAPH: "SUBGRAPH"i
+TRAVERSAL: "TRAVERSAL"i
+VARIABLE_PATH: "VARIABLE_PATH"i
+REPEAT: "REPEAT"i
+COALESCE_STEP: "COALESCE_STEP"i
+CHOOSE: "CHOOSE"i
+ADD_VERTEX: "ADD_VERTEX"i
+DROP_VERTEX: "DROP_VERTEX"i
+PAGE_RANK: "PAGE_RANK"i
+PROJECT: "PROJECT"i
+EXTEND: "EXTEND"i
+FILE_SOURCE: "FILE_SOURCE"i
+IMPORT: "IMPORT"i
+EXPORT: "EXPORT"i
+COPY: "COPY"i
+BULK_WRITE: "BULK_WRITE"i
+SLICING: "SLICING"i
+INDEXING: "INDEXING"i
+UNWIND: "UNWIND"i
+FLATTEN: "FLATTEN"i
+ARRAY_LENGTH: "ARRAY_LENGTH"i
+ARRAY_CONTAINS: "ARRAY_CONTAINS"i
+ARRAY_SORT: "ARRAY_SORT"i
+ARRAY_REVERSE: "ARRAY_REVERSE"i
+ARRAY_CONCAT: "ARRAY_CONCAT"i
+ARRAY_DISTINCT: "ARRAY_DISTINCT"i
+PUSH: "PUSH"i
+POP: "POP"i
+INCLUDE: "INCLUDE"i
+UNION: "UNION"i
+MINUS: "MINUS"i
+PIPE: "PIPE"i
+LET: "LET"i
+FOR: "FOR"i
+FOREACH: "FOREACH"i
+ASK: "ASK"i
+SUBSCRIBE: "SUBSCRIBE"i
+SUBSCRIPTION: "SUBSCRIPTION"i
+MUTATION: "MUTATION"i
+OPTIONS: "OPTIONS"i
+CONSTRUCT: "CONSTRUCT"i
+AGGREGATE: "AGGREGATE"i
+INTERSECT: "INTERSECT"i
+SUBQUERY: "SUBQUERY"i
+PIVOT: "PIVOT"i
+UNPIVOT: "UNPIVOT"i
+ROW_NUMBER: "ROW_NUMBER"i
+RANK: "RANK"i
+DENSE_RANK: "DENSE_RANK"i
+RECURSIVE_CTE: "RECURSIVE_CTE"i
+CASE: "CASE"i
+COALESCE: "COALESCE"i
+NULLIF: "NULLIF"i
+IF_EXPR: "IF_EXPR"i
+SWITCH: "SWITCH"i
+CONCAT: "CONCAT"i
+SUBSTRING: "SUBSTRING"i
+UPPER: "UPPER"i
+LOWER: "LOWER"i
+TRIM: "TRIM"i
+REPLACE_STR: "REPLACE_STR"i
+SPLIT: "SPLIT"i
+LENGTH: "LENGTH"i
+LPAD: "LPAD"i
+RPAD: "RPAD"i
+REVERSE_STR: "REVERSE_STR"i
+POSITION: "POSITION"i
+REPEAT_STR: "REPEAT_STR"i
+REGEX_EXTRACT: "REGEX_EXTRACT"i
+REGEX_REPLACE: "REGEX_REPLACE"i
+ABS: "ABS"i
+CEIL: "CEIL"i
+FLOOR: "FLOOR"i
+ROUND: "ROUND"i
+POWER: "POWER"i
+SQRT: "SQRT"i
+MOD: "MOD"i
+LOG: "LOG"i
+EXP: "EXP"i
+SIGN: "SIGN"i
+RANDOM: "RANDOM"i
+GREATEST: "GREATEST"i
+LEAST: "LEAST"i
+TRUNC: "TRUNC"i
+NOW: "NOW"i
+DATE_ADD: "DATE_ADD"i
+DATE_DIFF: "DATE_DIFF"i
+EXTRACT_DATE: "EXTRACT_DATE"i
+DATE_FORMAT: "DATE_FORMAT"i
+DATE_PARSE: "DATE_PARSE"i
+DATE_TRUNC: "DATE_TRUNC"i
+INTERVAL: "INTERVAL"i
+UNIX_TIMESTAMP: "UNIX_TIMESTAMP"i
+FROM_UNIXTIME: "FROM_UNIXTIME"i
+CAST: "CAST"i
+TYPEOF: "TYPEOF"i
+TRY_CAST: "TRY_CAST"i
+TO_STRING: "TO_STRING"i
+TO_NUMBER: "TO_NUMBER"i
+TO_BOOLEAN: "TO_BOOLEAN"i
+TO_DATE: "TO_DATE"i
+IS_NUMBER: "IS_NUMBER"i
+IS_STRING: "IS_STRING"i
+
+// Data types
+INT: "INT"i | "INTEGER"i
+VARCHAR: "VARCHAR"i
+TEXT: "TEXT"i
+FLOAT: "FLOAT"i
+DOUBLE: "DOUBLE"i
+DECIMAL: "DECIMAL"i
+DATE: "DATE"i
+DATETIME: "DATETIME"i
+TIMESTAMP: "TIMESTAMP"i
+BOOLEAN: "BOOLEAN"i | "BOOL"i
+JSON: "JSON"i
+
+// Boolean literals
+BOOLEAN_LITERAL: "TRUE"i | "FALSE"i
+
+// Terminals
+IDENTIFIER: /[a-zA-Z_][a-zA-Z0-9_]*/
+STRING: /"[^"]*"/ | /'[^']*'/
+NUMBER: /\d+(\.\d+)?([eE][+-]?\d+)?/
+
+%import common.WS
+%ignore WS
+%import common.CPP_COMMENT
+%import common.C_COMMENT
+%ignore CPP_COMMENT
+%ignore C_COMMENT

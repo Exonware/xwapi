@@ -1,0 +1,9 @@
+projects:
+  xwjson:
+    repo: xwjson
+    package_main: exonware-xwjson
+    package_wrapper: xwjson
+    python_version: "3.12"
+    has_wrapper: true
+    uses_check_versions: true
+

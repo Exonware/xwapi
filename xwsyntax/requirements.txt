@@ -1,0 +1,21 @@
+#exonware/xwsyntax/requirements.txt
+# Lockfile-style list for CI and local dev. Canonical source: pyproject.toml.
+# Refresh: pip install -e ".[dev]" or python .tools/ci/python_scripts/update_config.py --package-name xwsyntax (from monorepo root).
+
+# Source size (src/*): ~747.3 KB
+pip>=23.0.0
+
+# Core runtime (matches [project.dependencies])
+exonware-xwlazy
+exonware-xwnode
+exonware-xwsystem
+lark>=1.1.0
+
+# Dev (subset of [project.optional-dependencies] dev)
+black>=23.0.0
+isort>=5.12.0
+mypy>=1.0.0
+pytest>=7.0.0
+pytest-asyncio>=0.21.0
+pytest-benchmark>=4.0.0
+pytest-cov>=4.0.0

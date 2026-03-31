@@ -1,0 +1,138 @@
+
+# Source size (src/*): ~475.4 KB
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "exonware-xwapi"
+dynamic = ["version"]
+description = "Entity-to-Web-API conversion library: Python framework that turns internal configuration, service functions, and entities into production-ready APIs using FastAPI, with minimal boilerplate"
+readme = "README.md"
+requires-python = ">=3.12"
+keywords = ["api", "fastapi", "openapi", "rest", "graphql", "oauth2", "exonware"]
+classifiers = []
+dependencies = [
+  "exonware-xwsystem",
+  "exonware-xwentity",
+  "exonware-xwaction",
+  "exonware-xwschema",
+  "exonware-xwdata",
+  "fastapi>=0.104.0",
+  "uvicorn[standard]>=0.24.0",
+  "requests>=2.31.0",
+]
+authors = [{ name = "eXonware Backend Team", email = "connect@exonware.com" }]
+
+[project.license]
+text = "MIT"
+
+[project.optional-dependencies]
+dev = [
+  "black>=23.0.0",
+  "exonware-xwlazy",
+  "isort>=5.12.0",
+  "mypy>=1.0.0",
+  "pytest-asyncio>=0.21.0",
+  "pytest-cov>=4.0.0",
+  "pytest>=7.0.0",
+]
+lazy = [
+  "exonware-xwlazy",
+  "exonware-xwsystem[lazy]",
+]
+storage = [
+  "exonware-xwstorage",
+]
+full = [
+  "a2wsgi",
+  "aiodns",
+  "aiohttp",
+  "atomicwrites",
+  "attrs",
+  "bottleneck",
+  "brotli",
+  "brotlicffi",
+  "cachebox",
+  "cachetools",
+  "cbor2",
+  "chardet",
+  "cloudpickle",
+  "cython",
+  "dicttoxml",
+  "httpx",
+  "hyperlight_hyperjson",
+  "interegular",
+  "json5",
+  "lark",
+  "lz4",
+  "msgpack",
+  "msgspec",
+  "numexpr",
+  "numpy",
+  "orjson",
+  "pandas",
+  "pylru",
+  "pymongo",
+  "pyarrow",
+  "python-multipart",
+  "pytz",
+  "PyJWT",
+  "regex",
+  "rich",
+  "scikit-learn",
+  "simplejson",
+  "socks",
+  "tomli",
+  "tomli-w",
+  "uarray",
+  "xmltodict",
+  "zstandard",
+]
+
+[project.urls]
+Homepage = "https://exonware.com"
+Repository = "https://github.com/exonware/xwapi"
+Documentation = "https://github.com/exonware/xwapi#readme"
+
+[tool.black]
+line-length = 88
+target-version = ["py312"]
+
+[tool.isort]
+profile = "black"
+line_length = 88
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+disallow_any_generics = true
+disallow_untyped_calls = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+disallow_untyped_decorators = true
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_no_return = true
+warn_unreachable = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = "-v --tb=short"
+markers = []
+
+[tool.hatch.version]
+path = "src/exonware/xwapi/version.py"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/exonware"]
+
+[tool.hatch.build.targets.sdist]
+include = ["/src", "/tests", "/README.md", "/.github"]

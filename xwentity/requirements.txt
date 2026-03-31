@@ -1,0 +1,7 @@
+# Edit pyproject.toml only; refresh this file with: commands update_config --package-name xwentity
+# Source size (src/*): ~205.8 KB
+exonware-xwsystem
+exonware-xwaction
+exonware-xwnode
+exonware-xwschema
+

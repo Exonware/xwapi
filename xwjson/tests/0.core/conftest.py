@@ -1,0 +1,4 @@
+"""
+Configuration for core tests.
+"""
+

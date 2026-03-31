@@ -1,0 +1,66 @@
+# Source size (src/*): ~747.3 KB
+[build-system]
+requires = [
+    "hatchling",
+]
+build-backend = "hatchling.build"
+
+[project]
+name = "xwsyntax"
+dynamic = [
+    "version",
+]
+description = "Convenience wrapper for exonware-xwsyntax - provides 'import xwsyntax' alias"
+readme = "README.md"
+requires-python = ">=3.12"
+keywords = [
+    "grammar",
+    "parsing",
+    "bidirectional",
+    "syntax",
+    "exonware",
+]
+classifiers = []
+dependencies = [
+    "exonware-xwsyntax",
+]
+authors = [
+    { name = "eXonware Backend Team" },
+]
+
+[project.license]
+text = "MIT"
+
+[project.optional-dependencies]
+lazy = [
+    "exonware-xwsyntax[lazy]",
+]
+dev = [
+    "exonware-xwsyntax[dev]",
+]
+full = [
+    "exonware-xwsyntax[full]",
+]
+
+[project.urls]
+Homepage = "https://exonware.com"
+Repository = "https://github.com/exonware/xwsyntax"
+Documentation = "https://github.com/exonware/xwsyntax#readme"
+Subtree = "https://github.com/exonware/xwsyntax.git"
+
+[tool.hatch.version]
+path = "src/exonware/xwsyntax/version.py"
+
+[tool.hatch.build.targets.wheel]
+only-include = [
+    "README.md",
+    "src/xwsyntax_wrapper.py",
+]
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "/src",
+    "/tests",
+    "/README.md",
+    "/.github",
+]

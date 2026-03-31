@@ -1,0 +1,88 @@
+# Source size (src/*): ~230.7 KB
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "exonware-xwjson"
+dynamic = ["version"]
+description = "Extended binary JSON format - single version of truth for all format conversions"
+readme = "README.md"
+requires-python = ">=3.12"
+keywords = ["serialization", "json", "binary", "messagepack", "exonware"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
+
+# exonware-xw* dependencies intentionally unpinned (monorepo / local installs).
+dependencies = [
+    "exonware-xwsystem",
+    "exonware-xwnode",
+    "exonware-xwschema",
+    "msgspec",
+    "orjson",
+]
+
+[[project.authors]]
+name = "eXonware Backend Team"
+email = "connect@exonware.com"
+
+[project.license]
+text = "MIT"
+
+[project.optional-dependencies]
+lazy = [
+    "exonware-xwlazy",
+    "exonware-xwsystem[lazy]",
+]
+dev = [
+    "exonware-xwlazy",
+    "exonware-xwsystem",
+    "black>=23.0.0",
+    "isort>=5.12.0",
+    "mypy>=1.0.0",
+    "pytest>=7.0.0",
+    "pytest-asyncio>=0.21.0",
+    "pytest-cov>=4.0.0",
+]
+query = [
+    "exonware-xwquery",
+]
+full = [
+    "exonware-xwquery",
+    "atomicwrites>=1.4.0",
+    "interegular>=0.3.2",
+    "attrs>=22.0.0",
+    "jsonschema>=4.0.0",
+    "msgpack>=1.0.0",
+    "lz4>=4.0.0",
+    "zstandard>=0.22.0",
+    "PyYAML>=6.0",
+    "httpx>=0.25.0",
+    "rich>=13.0.0",
+    "regex>=2023.0.0",
+    "numpy>=1.24.0",
+    "pandas>=2.0.0",
+]
+
+[project.urls]
+Homepage = "https://exonware.com"
+Repository = "https://github.com/exonware/xwjson"
+Documentation = "https://github.com/exonware/xwjson#readme"
+Subtree = "https://github.com/exonware/xwjson.git"
+
+[tool.hatch.version]
+path = "src/exonware/xwjson/version.py"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/exonware"]
+py-modules = ["src/xwjson"]
+
+[tool.hatch.build.targets.sdist]
+include = ["/src", "/tests", "/README.md", "/.github"]

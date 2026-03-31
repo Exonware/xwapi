@@ -1,0 +1,77 @@
+# Source size (src/*): ~230.7 KB
+[build-system]
+requires = [
+    "hatchling",
+]
+build-backend = "hatchling.build"
+
+[project]
+name = "xwjson"
+dynamic = [
+    "version",
+]
+description = "Convenience wrapper for exonware-xwjson - provides 'import xwjson' alias"
+readme = "README.md"
+requires-python = ">=3.12"
+keywords = [
+    "serialization",
+    "json",
+    "binary",
+    "messagepack",
+    "exonware",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
+dependencies = [
+    "exonware-xwjson",
+]
+authors = [
+    { name = "eXonware Backend Team", email = "connect@exonware.com" },
+]
+
+[project.license]
+text = "MIT"
+
+[project.optional-dependencies]
+lazy = [
+    "exonware-xwjson[lazy]",
+]
+dev = [
+    "exonware-xwjson[dev]",
+]
+query = [
+    "exonware-xwjson[query]",
+]
+full = [
+    "exonware-xwjson[full]",
+]
+
+[project.urls]
+Homepage = "https://exonware.com"
+Repository = "https://github.com/exonware/xwjson"
+Documentation = "https://github.com/exonware/xwjson#readme"
+Subtree = "https://github.com/exonware/xwjson.git"
+
+[tool.hatch.version]
+path = "src/exonware/xwjson/version.py"
+
+[tool.hatch.build.targets.wheel]
+only-include = [
+    "README.md",
+    "src/xwjson_wrapper.py",
+]
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "/src",
+    "/tests",
+    "/README.md",
+    "/.github",
+]
