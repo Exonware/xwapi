@@ -82,6 +82,6 @@ app = api.create_app(engine="fastapi")
 ---
 
 MIT - see [LICENSE](LICENSE). Homepage: https://exonware.com
-Version: 0.0.1.2 | Updated: 01-Apr-2026
+Version: 0.9.0.2 | Updated: 01-Apr-2026
 
 *Built with ❤️ by eXonware.com - Revolutionizing Python Development Since 2025*

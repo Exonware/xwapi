@@ -6,7 +6,7 @@ that work with any AApiServer implementation.
 Company: eXonware.com
 Author: eXonware Backend Team
 Email: connect@exonware.com
-Version: 0.0.1.2
+Version: 0.9.0.2
 """
 
 from .router import create_admin_router, register_admin_endpoints

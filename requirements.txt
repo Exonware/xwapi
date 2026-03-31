@@ -1,4 +1,4 @@
-# Source size (src/*): ~475.4 KB
+# Source size (src/*): ~475.6 KB
 pip                     # Package installer (CI and lazy install)
 exonware-xwsystem
 exonware-xwentity

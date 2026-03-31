@@ -4,7 +4,7 @@ xwapi: Entity-to-Web-API Conversion Library
 Company: eXonware.com
 Author: eXonware Backend Team
 Email: connect@exonware.com
-Version: 0.0.1.2
+Version: 0.9.0.2
 """
 # =============================================================================
 # XWLAZY — GUIDE_00_MASTER: config_package_lazy_install_enabled (EARLY)

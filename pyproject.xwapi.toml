@@ -1,4 +1,4 @@
-# Source size (src/*): ~475.4 KB
+# Source size (src/*): ~475.6 KB
 [build-system]
 requires = [
     "hatchling",
@@ -22,7 +22,17 @@ keywords = [
     "oauth2",
     "exonware",
 ]
-classifiers = []
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Information Technology",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: Internet :: WWW/HTTP",
+]
 dependencies = [
     "exonware-xwapi",
 ]
@@ -51,6 +61,7 @@ full = [
 Homepage = "https://exonware.com"
 Repository = "https://github.com/exonware/xwapi"
 Documentation = "https://github.com/exonware/xwapi#readme"
+Subtree = "https://github.com/exonware/xwapi.git"
 
 [tool.black]
 line-length = 88
