@@ -5,7 +5,7 @@ Uses xwsystem Json/Yaml serializers. GUIDE_TEST root-cause fix.
 Company: eXonware.com
 Author: eXonware Backend Team
 Email: connect@exonware.com
-Version: 0.9.0.2
+Version: 0.9.0.3
 """
 
 from __future__ import annotations

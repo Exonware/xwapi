@@ -5,7 +5,7 @@ Flask-based API server engine using XWAction's FlaskActionEngine.
 Company: eXonware.com
 Author: eXonware Backend Team
 Email: connect@exonware.com
-Version: 0.9.0.2
+Version: 0.9.0.3
 """
 
 from typing import Any, Optional
