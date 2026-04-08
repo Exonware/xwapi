@@ -1,18 +1,22 @@
 #!/usr/bin/env python3
 """
 #exonware/xwapi/src/exonware/xwapi/common/app.py
-Engine-Agnostic App Factory
-Factory function for creating API applications with automatic OpenAPI generation,
-versioning support, deprecation headers, and module router registration.
-Works with any engine (FastAPI, Flask, etc.).
+Engine-agnostic app factory for publishing *exposable actions* over HTTP.
+
+Dispatches to registered server engines (FastAPI default, Flask supported) so the same
+higher-level xwapi flows can target ASGI or WSGI. Versioned routers and OpenAPI helpers
+support *build once, publish anywhere* across engine choices.
+
 Company: eXonware.com
 Author: eXonware Backend Team
 Email: connect@exonware.com
-Version: 0.9.0.3
+Version: 0.9.0.4
 """
 
 import logging
-from typing import Any, Optional, Callable
+from typing import Any, Optional
+
+from collections.abc import Callable
 from datetime import datetime, timedelta
 from exonware.xwapi.config import XWAPIConfig
 from exonware.xwapi.version import __version__
@@ -20,10 +24,10 @@ logger = logging.getLogger(__name__)
 
 
 def create_app(
-    config: Optional[XWAPIConfig] = None,
-    title: Optional[str] = None,
-    version: Optional[str] = None,
-    description: Optional[str] = None,
+    config: XWAPIConfig | None = None,
+    title: str | None = None,
+    version: str | None = None,
+    description: str | None = None,
     engine: str = "fastapi",
     **kwargs
 ) -> Any:
@@ -65,9 +69,9 @@ def register_module(
     app: Any,  # Engine-agnostic: accepts any framework app
     router: Any,  # Engine-agnostic: accepts any framework router
     prefix: str = "/v1",
-    tags: Optional[list[str]] = None,
+    tags: list[str] | None = None,
     deprecated: bool = False,
-    sunset: Optional[datetime] = None,
+    sunset: datetime | None = None,
 ) -> None:
     """
     Register a module router with versioning and deprecation support (engine-agnostic).
@@ -119,9 +123,9 @@ def add_version_router(
     app: Any,  # Engine-agnostic: accepts any framework app
     version: str,
     router: Any,  # Engine-agnostic: accepts any framework router
-    tags: Optional[list[str]] = None,
+    tags: list[str] | None = None,
     deprecated: bool = False,
-    sunset: Optional[datetime] = None,
+    sunset: datetime | None = None,
 ) -> None:
     """
     Add versioned router with automatic prefix (engine-agnostic).

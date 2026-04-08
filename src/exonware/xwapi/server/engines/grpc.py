@@ -5,10 +5,10 @@ gRPC-based API server engine using Protocol Buffers.
 Company: eXonware.com
 Author: eXonware Backend Team
 Email: connect@exonware.com
-Version: 0.9.0.3
+Version: 0.9.0.4
 """
 
-from typing import Any, Optional
+from typing import Any
 import threading
 import os
 import sys
@@ -32,10 +32,10 @@ class GrpcServerEngine(AApiServerEngineBase):
     def __init__(self):
         """Initialize gRPC server engine."""
         super().__init__("grpc")
-        self._server: Optional[Any] = None
+        self._server: Any | None = None
         self._protocol_type = ProtocolType.GRPC
         self._registered_actions: list[Any] = []
-        self._generated_proto_path: Optional[str] = None
+        self._generated_proto_path: str | None = None
     @property
 
     def protocol_type(self) -> ProtocolType:

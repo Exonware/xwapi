@@ -26,40 +26,8 @@ import subprocess
 from pathlib import Path
 from datetime import datetime
 
-
-def _find_monorepo_root(start: Path) -> Path:
-    """Find the monorepo root (folder that contains xwapi + xwsystem)."""
-    for p in [start] + list(start.parents):
-        if (p / "xwapi").is_dir() and (p / "xwsystem").is_dir():
-            return p
-    return start.parent.parent.parent
-
-
-def _add_monorepo_src_paths() -> None:
-    """Add all required sibling package src/ folders to sys.path for monorepo testing."""
-    test_dir = Path(__file__).parent
-    monorepo_root = _find_monorepo_root(test_dir.resolve())
-    for pkg in (
-        "xwapi",
-        "xwsystem",
-        "xwentity",
-        "xwauth",
-        "xwstorage",
-        "xwaction",
-        "xwschema",
-        "xwdata",
-        "xwnode",
-        "xwquery",
-        "xwjson",
-        "xwsyntax",
-    ):
-        src = monorepo_root / pkg / "src"
-        if src.is_dir():
-            sys.path.insert(0, str(src))
-# Add src to path before importing xwsystem
-_add_monorepo_src_paths()
-# ⚠️ CRITICAL: Configure UTF-8 encoding for Windows console using xwsystem utility (GUIDE_TEST.md)
 from exonware.xwsystem.console.cli import ensure_utf8_console
+
 ensure_utf8_console()
 
 
@@ -102,7 +70,7 @@ def format_path(path: Path) -> str:
     return str(path.resolve())
 
 
-def run_sub_runner(runner_path: Path, description: str, output: DualOutput) -> int:
+def run_sub_runner(runner_path: Path, description: str, output: DualOutput, *, xwapi_root: Path) -> int:
     """Run a sub-runner and return exit code."""
     separator = "="*80
     output.print(f"\n{separator}", f"\n## {description}\n")
@@ -110,7 +78,7 @@ def run_sub_runner(runner_path: Path, description: str, output: DualOutput) -> i
     output.print(f"{separator}\n", "")
     result = subprocess.run(
         [sys.executable, str(runner_path)],
-        cwd=runner_path.parent,
+        cwd=str(xwapi_root),
         capture_output=True,
         text=True,
         encoding='utf-8',
@@ -131,15 +99,13 @@ def main():
     """Main test runner function following GUIDE_TEST.md."""
     # Setup output logger
     test_dir = Path(__file__).parent
-    reports_dir = test_dir.parent / "docs" / "tests"
+    xwapi_root = test_dir.parent
+    reports_dir = xwapi_root / "docs" / "tests"
     reports_dir.mkdir(parents=True, exist_ok=True)
     from exonware.xwsystem.utils.test_runner import timestamp_for_filename
     timestamp = timestamp_for_filename()
     output_file = reports_dir / f"TEST_{timestamp}_SUMMARY.md"
     output = DualOutput(output_file)
-    # Add src to Python path for testing
-    src_path = test_dir.parent / "src"
-    sys.path.insert(0, str(src_path))
     # Header
     header = "="*80
     output.print(header, "# Test Execution Report")
@@ -158,16 +124,16 @@ def main():
     # Determine which tests to run
     if "--core" in args:
         if core_runner.exists():
-            exit_codes.append(run_sub_runner(core_runner, "Core Tests", output))
+            exit_codes.append(run_sub_runner(core_runner, "Core Tests", output, xwapi_root=xwapi_root))
     elif "--unit" in args:
         if unit_runner.exists():
-            exit_codes.append(run_sub_runner(unit_runner, "Unit Tests", output))
+            exit_codes.append(run_sub_runner(unit_runner, "Unit Tests", output, xwapi_root=xwapi_root))
     elif "--integration" in args:
         if integration_runner.exists():
-            exit_codes.append(run_sub_runner(integration_runner, "Integration Tests", output))
+            exit_codes.append(run_sub_runner(integration_runner, "Integration Tests", output, xwapi_root=xwapi_root))
     elif "--advance" in args:
         if advance_runner.exists():
-            exit_codes.append(run_sub_runner(advance_runner, "Advance Tests", output))
+            exit_codes.append(run_sub_runner(advance_runner, "Advance Tests", output, xwapi_root=xwapi_root))
         else:
             msg = "\n⚠️ Advance tests not available (requires v1.0.0)"
             output.print(msg, f"\n> {msg}")
@@ -175,7 +141,7 @@ def main():
         if advance_runner.exists():
             result = subprocess.run(
                 [sys.executable, str(advance_runner)] + args,
-                cwd=advance_runner.parent,
+                cwd=str(xwapi_root),
                 capture_output=True,
                 text=True,
                 encoding="utf-8",
@@ -198,13 +164,15 @@ def main():
         output.print(msg_layers, f"\n**Execution Order:** 0.core ✅ 1.unit ✅ 2.integration{advance_tag}\n")
         output.print("", "")
         if core_runner.exists():
-            exit_codes.append(run_sub_runner(core_runner, "Layer 0: Core Tests", output))
+            exit_codes.append(run_sub_runner(core_runner, "Layer 0: Core Tests", output, xwapi_root=xwapi_root))
         if unit_runner.exists():
-            exit_codes.append(run_sub_runner(unit_runner, "Layer 1: Unit Tests", output))
+            exit_codes.append(run_sub_runner(unit_runner, "Layer 1: Unit Tests", output, xwapi_root=xwapi_root))
         if integration_runner.exists():
-            exit_codes.append(run_sub_runner(integration_runner, "Layer 2: Integration Tests", output))
+            exit_codes.append(
+                run_sub_runner(integration_runner, "Layer 2: Integration Tests", output, xwapi_root=xwapi_root)
+            )
         if advance_runner.exists():
-            exit_codes.append(run_sub_runner(advance_runner, "Layer 3: Advance Tests", output))
+            exit_codes.append(run_sub_runner(advance_runner, "Layer 3: Advance Tests", output, xwapi_root=xwapi_root))
     # Print summary
     summary_header = f"\n{'='*80}"
     output.print(summary_header, f"\n---\n\n## 📈 Test Execution Summary")

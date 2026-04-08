@@ -1,16 +1,18 @@
 # xwapi — API Reference
 
-**Last Updated:** 31-Mar-2026
+**Last Updated:** 05-Apr-2026
 
-This reference summarizes the current public surface and operational feature set.
+This reference summarizes the public surface for **publishing** and **consuming** exposable actions (HTTP via FastAPI/Flask engines, plus pipeline/token ops).
 
 ## Primary exports
 
 From `exonware.xwapi`:
 
-- Facade/runtime:
+- Publisher facade / server:
   - `XWAPI`
   - `XWApiServer`
+- Consumer agent:
+  - `XWApiAgent`
 - Pipeline:
   - `ActionPipelineManager`
   - `BackgroundWorker`
@@ -37,7 +39,7 @@ From `exonware.xwapi`:
 ## `XWAPI` facade methods
 
 - `generate_openapi()`
-- `create_app(engine="fastapi")`
+- `create_app(engine="fastapi")` — or `engine="flask"` for the WSGI engine; same action registration model
 - `start(...)`
 - `stop()`
 - `restart()`

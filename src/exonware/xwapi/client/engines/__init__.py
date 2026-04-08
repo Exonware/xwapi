@@ -7,7 +7,7 @@ Reliability/Performance, Observability/Operations, Contract/Evolution.
 Company: eXonware.com
 Author: eXonware Backend Team
 Email: connect@exonware.com
-Version: 0.9.0.3
+Version: 0.9.0.4
 """
 
 from typing import Any, Optional
@@ -26,7 +26,7 @@ class ApiAgentEngineRegistry:
 
     def __init__(self):
         self._engines: dict[str, IApiAgentEngine] = {}
-        self._default_engine: Optional[str] = None
+        self._default_engine: str | None = None
 
     def register(self, engine: IApiAgentEngine, set_default: bool = False):
         """
@@ -40,7 +40,7 @@ class ApiAgentEngineRegistry:
             self._default_engine = engine.name
         logger.info(f"Registered API agent engine: {engine.name}")
 
-    def get_engine(self, name: Optional[str] = None) -> Optional[IApiAgentEngine]:
+    def get_engine(self, name: str | None = None) -> IApiAgentEngine | None:
         """
         Get engine by name, or default if name is None.
         Args:

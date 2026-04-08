@@ -5,7 +5,9 @@ Pause/resume request admission middleware for XWApiServer.
 
 from __future__ import annotations
 
-from typing import Any, Callable
+from typing import Any
+
+from collections.abc import Callable
 
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request

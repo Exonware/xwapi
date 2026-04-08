@@ -1,12 +1,13 @@
 #exonware/xwapi/src/exonware/xwapi/config.py
 """
-Configuration classes for xwapi library.
-Uses XWSystem's configuration system for system-level settings.
-API-specific settings (title, version, OAuth2) are stored here.
+API-level configuration for publishing exposable actions (title, version, OAuth2, security).
+
+System-wide settings remain in XWSystem; this module holds what OpenAPI and HTTP engines need.
+
 Company: eXonware.com
 Author: eXonware Backend Team
 Email: connect@exonware.com
-Version: 0.9.0.3
+Version: 0.9.0.4
 """
 
 from typing import Any, Optional
@@ -21,16 +22,16 @@ class XWAPIConfig:
     """
     title: str = DEFAULT_API_TITLE
     version: str = DEFAULT_API_VERSION
-    description: Optional[str] = None
-    terms_of_service: Optional[str] = None
-    contact: Optional[dict[str, str]] = None
-    license_info: Optional[dict[str, str]] = None
+    description: str | None = None
+    terms_of_service: str | None = None
+    contact: dict[str, str] | None = None
+    license_info: dict[str, str] | None = None
     servers: list[dict[str, str]] = field(default_factory=list)
     enable_oauth2: bool = False
-    oauth2_config: Optional[OAuth2Config] = None
+    oauth2_config: OAuth2Config | None = None
     default_security: list[str] = field(default_factory=list)
     security_schemes: dict[str, Any] = field(default_factory=dict)
-    openapi_tags: Optional[list[dict[str, Any]]] = None
+    openapi_tags: list[dict[str, Any]] | None = None
 
     def __post_init__(self):
         """Post-initialization validation."""

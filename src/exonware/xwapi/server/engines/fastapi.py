@@ -1,19 +1,24 @@
 #exonware/xwapi/src/exonware/xwapi/server/engines/fastapi.py
 """
-FastAPI Server Engine Implementation
-FastAPI-based API server engine using XWAction's FastAPIActionEngine.
+Default HTTP **server engine**: FastAPI (ASGI, OpenAPI, async) for exposable actions.
+
+Uses ``FastAPIActionEngine`` from xwaction. Prefer this engine when you want the full
+FastAPI/Starlette ecosystem; use ``flask`` engine for WSGI instead.
+
 Company: eXonware.com
 Author: eXonware Backend Team
 Email: connect@exonware.com
-Version: 0.9.0.3
+Version: 0.9.0.4
 """
 
-from typing import Any, Optional
+from typing import Any
 from datetime import datetime, timezone
+import fastapi
 from fastapi import FastAPI, Query, Depends, HTTPException
 from fastapi.exceptions import RequestValidationError
 from fastapi.openapi.utils import get_openapi
 from starlette.responses import JSONResponse
+from starlette.exceptions import HTTPException as StarletteHTTPException
 import uvicorn
 from exonware.xwaction.engines.fastapi import FastAPIActionEngine
 from exonware.xwapi.errors import (
@@ -37,12 +42,12 @@ logger = get_logger(__name__)
 # Parse query strings directly and pass to XWQuery - no need for QueryParams class
 
 def get_query_params(
-    filter: Optional[str] = Query(None, alias="filter", description="Filter expression (e.g., 'status:active')"),
-    sort: Optional[str] = Query(None, description="Sort expression (e.g., '-created_at' or 'name:asc')"),
+    filter: str | None = Query(None, alias="filter", description="Filter expression (e.g., 'status:active')"),
+    sort: str | None = Query(None, description="Sort expression (e.g., '-created_at' or 'name:asc')"),
     limit: int = Query(20, ge=1, le=100, description="Maximum number of results"),
     offset: int = Query(0, ge=0, description="Pagination offset"),
-    cursor: Optional[str] = Query(None, description="Cursor for cursor-based pagination"),
-    search: Optional[str] = Query(None, description="Search query string"),
+    cursor: str | None = Query(None, description="Cursor for cursor-based pagination"),
+    search: str | None = Query(None, description="Search query string"),
 ) -> dict[str, Any]:
     """
     FastAPI dependency for parsing query parameters.
@@ -101,22 +106,23 @@ async def xwapi_exception_handler(request: "fastapi.Request", exc: XWAPIError) -
         }
     )
     return starlette_json_response_from_xwapi_error(exc, request=request)
-async def http_exception_handler(request: "fastapi.Request", exc: "fastapi.HTTPException") -> "fastapi.responses.JSONResponse":
+async def http_exception_handler(request: "fastapi.Request", exc: Any) -> "fastapi.responses.JSONResponse":
     """
     Handler for FastAPI HTTPException (FastAPI-specific).
     Converts HTTPException to uniform error response format.
     Args:
         request: FastAPI request object
-        exc: HTTPException
+        exc: HTTPException (FastAPI or Starlette)
     Returns:
         JSONResponse with uniform error shape
     """
     message = str(exc.detail or "HTTP error")
     error = http_status_to_xwapi_error(exc.status_code, message)
     body, _, headers = xwapi_error_to_http_parts(error, request=request)
+    if isinstance(getattr(exc, "headers", None), dict):
+        headers.update(exc.headers)
     # Preserve original framework status for HTTPException passthrough.
     return JSONResponse(status_code=exc.status_code, content=body, headers=headers)
-
 
 async def request_validation_exception_handler(request: "fastapi.Request", exc: RequestValidationError) -> "fastapi.responses.JSONResponse":
     """Convert FastAPI validation errors into unified XWAPI format."""
@@ -185,7 +191,6 @@ async def generic_exception_handler(request: "fastapi.Request", exc: Exception) 
     )
     return starlette_json_response_from_xwapi_error(error, request=request)
 
-
 class FastAPIServerEngine(AHttpServerEngineBase):
     """
     FastAPI Server Engine
@@ -196,9 +201,9 @@ class FastAPIServerEngine(AHttpServerEngineBase):
     def __init__(self):
         """Initialize FastAPI server engine."""
         super().__init__("fastapi")
-        self._app: Optional[FastAPI] = None
+        self._app: FastAPI | None = None
         self._protocol_type = ProtocolType.HTTP_REST  # FastAPI is HTTP REST
-        self._fastapi_action_engine: Optional[FastAPIActionEngine] = None
+        self._fastapi_action_engine: FastAPIActionEngine | None = None
     @property
 
     def protocol_type(self) -> ProtocolType:
@@ -232,6 +237,9 @@ class FastAPIServerEngine(AHttpServerEngineBase):
         # Register global exception handlers
         app.add_exception_handler(XWAPIError, xwapi_exception_handler)
         app.add_exception_handler(HTTPException, http_exception_handler)
+        # Starlette middleware often raises starlette.exceptions.HTTPException directly.
+        # Register the same adapter to keep error shape consistent across middleware stacks.
+        app.add_exception_handler(StarletteHTTPException, http_exception_handler)
         app.add_exception_handler(RequestValidationError, request_validation_exception_handler)
         app.add_exception_handler(Exception, generic_exception_handler)
         # Install request trace correlation middleware for all routes.

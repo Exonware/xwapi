@@ -370,7 +370,7 @@ def test_fastapi_engine_with_concurrent_app_creation():
     for t in threads:
         t.join()
     assert len(apps) == 10
-    assert len(set(id(app) for app in apps)) == 10  # All different instances
+    assert len({id(app) for app in apps}) == 10  # All different instances
 @pytest.mark.xwapi_unit
 
 def test_fastapi_engine_app_caching():

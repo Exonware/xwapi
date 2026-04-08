@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Provider abstractions and default adapters for auth/storage/payment.
+Provider adapters for secured *exposable actions* and API runtime (auth, storage, payment).
 """
 
 from __future__ import annotations
@@ -11,7 +11,7 @@ from datetime import datetime, timedelta, timezone
 from threading import RLock
 from typing import Any, Optional
 
-from exonware.xwapi.contracts import IAuthProvider, IStorageProvider, IPaymentProvider
+from exonware.xwapi.contracts import AuthContext, IAuthProvider, IStorageProvider, IPaymentProvider
 
 
 def _utc_now_iso() -> str:
@@ -85,8 +85,8 @@ class LocalAuthProvider(IAuthProvider):
         subject_id: str,
         name: str,
         scopes: list[str],
-        expires_in_seconds: Optional[int] = None,
-        metadata: Optional[dict[str, Any]] = None,
+        expires_in_seconds: int | None = None,
+        metadata: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         token_id = secrets.token_hex(10)
         secret = secrets.token_urlsafe(32)
@@ -137,6 +137,23 @@ class LocalAuthProvider(IAuthProvider):
             record["revoked"] = True
             return True
 
+    async def resolve_auth_context(self, token: str) -> AuthContext | None:
+        claims = await self.verify_api_token(token)
+        if not isinstance(claims, dict):
+            return None
+        claims_copy = dict(claims)
+        return AuthContext(
+            subject_id=str(claims_copy.get("subject_id") or ""),
+            tenant_id=claims_copy.get("tenant_id") or claims_copy.get("tid"),
+            scopes=list(claims_copy.get("scopes") or []),
+            roles=list(claims_copy.get("roles") or []),
+            session_id=claims_copy.get("session_id"),
+            aal=claims_copy.get("aal"),
+            claims=claims_copy,
+            token_id=claims_copy.get("token_id"),
+            token_type=str(claims_copy.get("token_type") or "api_token"),
+        )
+
 
 class XWAuthLibraryProvider(LocalAuthProvider):
     """
@@ -147,6 +164,116 @@ class XWAuthLibraryProvider(LocalAuthProvider):
     def __init__(self, auth: Any):
         super().__init__()
         self._auth = auth
+
+    async def issue_api_token(
+        self,
+        *,
+        subject_id: str,
+        name: str,
+        scopes: list[str],
+        expires_in_seconds: int | None = None,
+        metadata: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        # Keep local issuance for product API keys unless xwauth explicitly exposes issue_api_token.
+        issuer = getattr(self._auth, "issue_api_token", None)
+        if callable(issuer):
+            issued = await issuer(
+                subject_id=subject_id,
+                name=name,
+                scopes=scopes,
+                expires_in_seconds=expires_in_seconds,
+                metadata=metadata,
+            )
+            if isinstance(issued, dict):
+                return issued
+        return await super().issue_api_token(
+            subject_id=subject_id,
+            name=name,
+            scopes=scopes,
+            expires_in_seconds=expires_in_seconds,
+            metadata=metadata,
+        )
+
+    async def verify_api_token(self, token: str) -> dict[str, Any] | None:
+        resolver = getattr(self._auth, "resolve_auth_context", None)
+        if callable(resolver):
+            context = await resolver(token)
+            if context:
+                return self._context_to_claims(context)
+        introspect = getattr(self._auth, "introspect_token", None)
+        if callable(introspect):
+            try:
+                result = await introspect(token)
+                if isinstance(result, dict) and bool(result.get("active", False)):
+                    return self._normalize_introspection_claims(result)
+            except Exception:
+                pass
+        # Backward compatible fallback to local tokens.
+        return await super().verify_api_token(token)
+
+    async def resolve_auth_context(self, token: str) -> AuthContext | None:
+        resolver = getattr(self._auth, "resolve_auth_context", None)
+        if callable(resolver):
+            context = await resolver(token)
+            if context:
+                if isinstance(context, AuthContext):
+                    return context
+                return self._claims_to_context(self._context_to_claims(context))
+        claims = await self.verify_api_token(token)
+        if not isinstance(claims, dict):
+            return None
+        return self._claims_to_context(claims)
+
+    @staticmethod
+    def _context_to_claims(context: Any) -> dict[str, Any]:
+        if isinstance(context, dict):
+            return dict(context)
+        claims = dict(getattr(context, "claims", {}) or {})
+        claims.setdefault("subject_id", getattr(context, "subject_id", claims.get("subject_id")))
+        claims.setdefault("tenant_id", getattr(context, "tenant_id", claims.get("tenant_id")))
+        claims.setdefault("scopes", list(getattr(context, "scopes", claims.get("scopes", [])) or []))
+        claims.setdefault("roles", list(getattr(context, "roles", claims.get("roles", [])) or []))
+        claims.setdefault("session_id", getattr(context, "session_id", claims.get("session_id")))
+        claims.setdefault("aal", getattr(context, "aal", claims.get("aal")))
+        claims.setdefault("token_id", getattr(context, "token_id", claims.get("token_id")))
+        claims.setdefault("token_type", getattr(context, "token_type", claims.get("token_type")))
+        return claims
+
+    @staticmethod
+    def _normalize_introspection_claims(result: dict[str, Any]) -> dict[str, Any]:
+        claims: dict[str, Any] = dict(result)
+        subject_id = (
+            result.get("subject_id")
+            or result.get("sub")
+            or result.get("user_id")
+            or result.get("client_id")
+            or ""
+        )
+        claims["subject_id"] = str(subject_id)
+        scopes = result.get("scope")
+        if isinstance(scopes, str):
+            claims["scopes"] = [scope for scope in scopes.split(" ") if scope]
+        else:
+            claims["scopes"] = list(result.get("scopes") or [])
+        claims.setdefault("roles", list(result.get("roles") or []))
+        claims.setdefault("tenant_id", result.get("tenant_id") or result.get("tid"))
+        claims.setdefault("token_type", result.get("token_type") or "bearer")
+        return claims
+
+    @staticmethod
+    def _claims_to_context(claims: dict[str, Any]) -> AuthContext:
+        claims_copy = dict(claims)
+        return AuthContext(
+            subject_id=str(claims_copy.get("subject_id") or ""),
+            tenant_id=claims_copy.get("tenant_id") or claims_copy.get("tid"),
+            scopes=list(claims_copy.get("scopes") or []),
+            roles=list(claims_copy.get("roles") or []),
+            session_id=claims_copy.get("session_id"),
+            aal=claims_copy.get("aal"),
+            claims=claims_copy,
+            token_id=claims_copy.get("token_id"),
+            token_type=claims_copy.get("token_type"),
+        )
 
 
 class InMemoryPaymentProvider(IPaymentProvider):
@@ -164,7 +291,7 @@ class InMemoryPaymentProvider(IPaymentProvider):
         subject_id: str,
         amount: float,
         currency: str = "USD",
-        metadata: Optional[dict[str, Any]] = None,
+        metadata: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         if amount <= 0:
             raise ValueError("amount must be > 0")
@@ -197,7 +324,7 @@ class InMemoryPaymentProvider(IPaymentProvider):
         *,
         subject_id: str,
         amount: float,
-        metadata: Optional[dict[str, Any]] = None,
+        metadata: dict[str, Any] | None = None,
         idempotency_key: str | None = None,
     ) -> dict[str, Any]:
         if amount <= 0:

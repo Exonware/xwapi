@@ -9,7 +9,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from threading import RLock
-from typing import Any, Optional
+from typing import Any
 from uuid import uuid4
 
 
@@ -29,9 +29,9 @@ class OutboxJob:
     max_attempts: int = 5
     created_at: datetime = field(default_factory=_utc_now)
     run_after: datetime = field(default_factory=_utc_now)
-    lease_expires_at: Optional[datetime] = None
-    last_error: Optional[str] = None
-    result: Optional[Any] = None
+    lease_expires_at: datetime | None = None
+    last_error: str | None = None
+    result: Any | None = None
 
 
 class AOutboxStore(ABC):
@@ -43,7 +43,7 @@ class AOutboxStore(ABC):
         job_type: str,
         payload: dict[str, Any],
         *,
-        run_after: Optional[datetime] = None,
+        run_after: datetime | None = None,
         max_attempts: int = 5,
     ) -> str:
         pass
@@ -53,7 +53,7 @@ class AOutboxStore(ABC):
         pass
 
     @abstractmethod
-    def mark_done(self, job_id: str, result: Optional[Any] = None) -> None:
+    def mark_done(self, job_id: str, result: Any | None = None) -> None:
         pass
 
     @abstractmethod
@@ -77,7 +77,7 @@ class InMemoryOutboxStore(AOutboxStore):
         job_type: str,
         payload: dict[str, Any],
         *,
-        run_after: Optional[datetime] = None,
+        run_after: datetime | None = None,
         max_attempts: int = 5,
     ) -> str:
         with self._lock:
@@ -110,7 +110,7 @@ class InMemoryOutboxStore(AOutboxStore):
                 claimed.append(job)
         return claimed
 
-    def mark_done(self, job_id: str, result: Optional[Any] = None) -> None:
+    def mark_done(self, job_id: str, result: Any | None = None) -> None:
         with self._lock:
             job = self._jobs.get(job_id)
             if not job:
@@ -162,7 +162,7 @@ class OracleAQOutboxStore(AOutboxStore):
         job_type: str,
         payload: dict[str, Any],
         *,
-        run_after: Optional[datetime] = None,
+        run_after: datetime | None = None,
         max_attempts: int = 5,
     ) -> str:
         return self._backend.enqueue(job_type, payload, run_after=run_after, max_attempts=max_attempts)
@@ -170,7 +170,7 @@ class OracleAQOutboxStore(AOutboxStore):
     def claim_due(self, *, limit: int, lease_seconds: int, worker_id: str) -> list[OutboxJob]:
         return self._backend.claim_due(limit=limit, lease_seconds=lease_seconds, worker_id=worker_id)
 
-    def mark_done(self, job_id: str, result: Optional[Any] = None) -> None:
+    def mark_done(self, job_id: str, result: Any | None = None) -> None:
         self._backend.mark_done(job_id, result=result)
 
     def mark_failed(self, job_id: str, error: str, *, retry_delay_seconds: int) -> None:
@@ -194,7 +194,7 @@ class OracleSchedulerOutboxStore(AOutboxStore):
         job_type: str,
         payload: dict[str, Any],
         *,
-        run_after: Optional[datetime] = None,
+        run_after: datetime | None = None,
         max_attempts: int = 5,
     ) -> str:
         return self._backend.enqueue(job_type, payload, run_after=run_after, max_attempts=max_attempts)
@@ -202,7 +202,7 @@ class OracleSchedulerOutboxStore(AOutboxStore):
     def claim_due(self, *, limit: int, lease_seconds: int, worker_id: str) -> list[OutboxJob]:
         return self._backend.claim_due(limit=limit, lease_seconds=lease_seconds, worker_id=worker_id)
 
-    def mark_done(self, job_id: str, result: Optional[Any] = None) -> None:
+    def mark_done(self, job_id: str, result: Any | None = None) -> None:
         self._backend.mark_done(job_id, result=result)
 
     def mark_failed(self, job_id: str, error: str, *, retry_delay_seconds: int) -> None:

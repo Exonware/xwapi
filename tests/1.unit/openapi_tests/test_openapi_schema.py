@@ -44,7 +44,7 @@ def test_validate_openapi_schema():
         "paths": {}
     }
     result = validate_openapi_schema(valid_schema)
-    # Should return tuple (bool, Optional[str]) for validation result
+    # Should return tuple (bool, str | None) for validation result
     assert isinstance(result, tuple)
     assert len(result) == 2
     assert isinstance(result[0], bool)

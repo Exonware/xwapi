@@ -1,13 +1,15 @@
 #!/usr/bin/env python3
 """
 #exonware/xwapi/src/exonware/xwapi/errors.py
-Uniform Error Model for xwapi
-Implements uniform error response shape for all APIs with trace_id support,
-structured error codes, and OpenTelemetry correlation.
+Uniform error model for publishers and consumers of exposable actions (HTTP and beyond).
+
+Stable shapes for APIs with trace_id, structured codes, and correlation hooks so servers
+and clients agree on failure semantics across engines (FastAPI, Flask, …).
+
 Company: eXonware.com
 Author: eXonware Backend Team
 Email: connect@exonware.com
-Version: 0.9.0.3
+Version: 0.9.0.4
 """
 
 from __future__ import annotations
@@ -24,9 +26,9 @@ class XWAPIError(Exception):
     def __init__(
         self,
         message: str,
-        code: Optional[str] = None,
-        details: Optional[dict[str, Any]] = None,
-        hint: Optional[str] = None,
+        code: str | None = None,
+        details: dict[str, Any] | None = None,
+        hint: str | None = None,
     ):
         """
         Initialize API error.
@@ -197,7 +199,7 @@ def get_http_status_code(error: XWAPIError) -> int:
     return error_status_map.get(error.code, HTTP_500_INTERNAL_SERVER_ERROR)
 
 
-def http_status_to_xwapi_error(status_code: int, message: str, *, details: Optional[dict[str, Any]] = None) -> XWAPIError:
+def http_status_to_xwapi_error(status_code: int, message: str, *, details: dict[str, Any] | None = None) -> XWAPIError:
     """
     Translate generic HTTP status codes into the canonical XWAPIError hierarchy.
     This adapter is engine/protocol agnostic and can be reused by any HTTP engine.
@@ -218,7 +220,7 @@ def http_status_to_xwapi_error(status_code: int, message: str, *, details: Optio
 
 def error_to_http_response(
     error: XWAPIError,
-    request: Optional[Any] = None,
+    request: Any | None = None,
     include_details: bool = True,
 ) -> tuple[dict[str, Any], int]:
     """
@@ -246,9 +248,9 @@ def error_to_http_response(
 
 def xwapi_error_to_http_parts(
     error: XWAPIError,
-    request: Optional[Any] = None,
+    request: Any | None = None,
     include_details: bool = True,
-    extra_headers: Optional[dict[str, str]] = None,
+    extra_headers: dict[str, str] | None = None,
 ) -> tuple[dict[str, Any], int, dict[str, str]]:
     """
     Convert an XWAPIError into framework-neutral HTTP response parts.
@@ -316,7 +318,7 @@ def get_trace_id(request: Any) -> str:
 
 def create_error_response(
     error: XWAPIError,
-    trace_id: Optional[str] = None,
+    trace_id: str | None = None,
     include_details: bool = True,
 ) -> dict[str, Any]:
     """
@@ -357,7 +359,7 @@ def create_error_response(
 # =============================================================================
 
 
-def get_error_headers(trace_id: Optional[str] = None) -> dict[str, str]:
+def get_error_headers(trace_id: str | None = None) -> dict[str, str]:
     """
     Get standard error response headers (engine-agnostic).
     Args:

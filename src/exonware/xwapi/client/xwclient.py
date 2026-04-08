@@ -1,24 +1,29 @@
 #!/usr/bin/env python3
 """
 #exonware/xwapi/src/exonware/xwapi/client/xwclient.py
-XWApiAgent - API Agent Implementation
-Concrete implementation of API agent pattern for xwapi library.
+XWApiAgent — client/agent side of *exposable actions*.
+
+Discovers ``XWAction`` methods, integrates OAuth and entity sessions, and is the mirror of
+``XWApiServer``: **build once** (actions/contracts), then **publish** on the server and
+**consume** from agents or bots calling the same APIs.
+
 Company: eXonware.com
 Author: eXonware Backend Team
 Email: connect@exonware.com
-Version: 0.9.0.3
+Version: 0.9.0.4
 """
 
-from typing import Any, Optional, Callable, TYPE_CHECKING
+from typing import Any, Optional
+
+from collections.abc import Callable
 from inspect import isfunction
 from pathlib import Path
 from exonware.xwsystem.io.serialization import JsonSerializer
 from urllib.parse import urlparse
 from exonware.xwapi.client.base import AApiAgent
+from exonware.xwapi.client.builtin_entity_session_manager import EntitySessionManager
+from exonware.xwapi.client.builtin_oauth_client import OAuth2ClientManager
 from exonware.xwsystem import get_logger
-from exonware.xwauth import XWAuth
-from exonware.xwauth.clients.oauth_client import OAuth2ClientManager
-from exonware.xwauth.clients.entity_session_manager import EntitySessionManager
 from exonware.xwaction import XWAction, ActionProfile
 # Import agent engines
 from exonware.xwapi.client.engines import api_agent_engine_registry, IApiAgentEngine
@@ -27,9 +32,9 @@ logger = get_logger(__name__)
 
 class XWApiAgent(AApiAgent):
     """
-    Concrete implementation of API Agent pattern.
-    Provides a base class for creating API agents that expose XWAction-decorated
-    functions as API endpoints via ApiServer.
+    Agent base class: own ``XWAction`` methods and register them onto an ``ApiServer``, or use
+    the same patterns to drive **client** flows against remote exposable actions.
+
     Usage:
         >>> from exonware.xwapi import XWApiAgent
         >>> from exonware.xwaction import XWAction
@@ -49,10 +54,10 @@ class XWApiAgent(AApiAgent):
 
     def __init__(
         self, 
-        name: Optional[str] = None, 
+        name: str | None = None, 
         auto_discover: bool = True, 
         entity_type: str = DEFAULT_ENTITY_TYPE,
-        agent_engine: Optional[str] = None
+        agent_engine: str | None = None
     ):
         """
         Initialize XWApiAgent instance.
@@ -66,19 +71,20 @@ class XWApiAgent(AApiAgent):
         super().__init__(name=name)
         self._auto_discover = auto_discover
         self._actions: list[Callable] = []
-        self._auth: Optional[Any] = None  # Optional XWAuth instance
+        self._auth: Any | None = None  # Optional XWAuth instance
         # Store auth configs by platform, then by auth_name
         # Structure: {platform: {auth_name: config_dict}}
         self._auth_configs: dict[str, dict[str, dict[str, Any]]] = {}
-        # Generic entity management (using xwauth)
+        # Generic entity + OAuth client state (built-in managers; no xwauth/xwlogin dependency)
         self._entity_type = entity_type
         self._entities: dict[str, dict[str, Any]] = {}  # Generic entities dict
-        # Initialize xwauth client managers
         self._oauth_client_manager = OAuth2ClientManager()
         self._entity_session_manager = EntitySessionManager(self._entities)
+        # Subsystems for /revive user_report: (step_id, title, runner(agent) -> lines)
+        self._revival_steps: list[tuple[str, str, Callable[[Any], list[str]]]] = []
         # Get agent engine from registry
         if api_agent_engine_registry:
-            self._agent_engine: Optional[IApiAgentEngine] = api_agent_engine_registry.get_engine(agent_engine)
+            self._agent_engine: IApiAgentEngine | None = api_agent_engine_registry.get_engine(agent_engine)
             if not self._agent_engine:
                 logger.warning(f"Agent engine '{agent_engine}' not found, using default")
                 self._agent_engine = api_agent_engine_registry.get_engine()  # Get default
@@ -166,7 +172,7 @@ class XWApiAgent(AApiAgent):
         self._actions.clear()
         logger.debug(f"Cleared all actions from agent {self._name}")
 
-    def load_auth_config(self, platform: str, auth_name: str, config_path: Optional[str] = None) -> dict[str, Any]:
+    def load_auth_config(self, platform: str, auth_name: str, config_path: str | None = None) -> dict[str, Any]:
         """
         Load authentication configuration from JSON file.
         This method loads auth configs from files but doesn't require xwauth.
@@ -201,7 +207,7 @@ class XWApiAgent(AApiAgent):
         logger.info(f"Loaded auth config for platform '{platform}' auth '{auth_name}' from {config_path}")
         return config
 
-    def get_auth_config(self, platform: str, auth_name: Optional[str] = None) -> Optional[dict[str, Any] | dict[str, dict[str, Any]]]:
+    def get_auth_config(self, platform: str, auth_name: str | None = None) -> dict[str, Any] | dict[str, dict[str, Any]] | None:
         """
         Get authentication configuration for a platform and optionally specific auth.
         Args:
@@ -255,24 +261,25 @@ class XWApiAgent(AApiAgent):
         logger.info(f"Loaded {loaded_count} auth configs from {base_path}")
         return self._auth_configs.copy()
 
-    def init_xwauth(self, jwt_secret: str, providers: Optional[list[str]] = None, **kwargs) -> Any:
+    def init_xwauth(self, jwt_secret: str, providers: list[str] | None = None, **kwargs) -> Any:
         """
-        Initialize XWAuth instance.
-        Args:
-            jwt_secret: JWT secret key for token signing
-            providers: Optional list of provider names to enable
-            **kwargs: Additional arguments passed to XWAuth constructor
-        Returns:
-            XWAuth instance
-        Example:
-            >>> agent.init_xwauth(jwt_secret='my-secret', providers=['google'])
+        Initialize optional ``exonware.xwauth.XWAuth`` when that package is installed.
+
+        xwapi core does not depend on xwauth; use this only when you add that extra.
         """
+        try:
+            from exonware.xwauth import XWAuth
+        except ImportError as e:
+            raise RuntimeError(
+                "init_xwauth() requires optional dependency 'exonware-xwauth'. "
+                "Install it in your environment, or use server/auth_provider patterns instead."
+            ) from e
         self._auth = XWAuth(jwt_secret=jwt_secret, providers=providers or [], **kwargs)
         logger.info(f"Initialized XWAuth for agent {self._name}")
         return self._auth
     @property
 
-    def auth(self) -> Optional[Any]:
+    def auth(self) -> Any | None:
         """
         Get XWAuth instance if available.
         Returns:
@@ -287,7 +294,7 @@ class XWApiAgent(AApiAgent):
     # Authentication Helpers (Category 12) - Token management
     # ============================================================================
 
-    def save_tokens(self, platform: str, auth_name: str, tokens: dict[str, Any], token_path: Optional[str] = None) -> None:
+    def save_tokens(self, platform: str, auth_name: str, tokens: dict[str, Any], token_path: str | None = None) -> None:
         """
         Save authentication tokens to a JSON file.
         Generic method for persisting authentication tokens. Subclasses can override
@@ -306,7 +313,7 @@ class XWApiAgent(AApiAgent):
         JsonSerializer().save_file(tokens, token_file, indent=2, sort_keys=True)
         logger.info(f"Saved tokens for platform '{platform}' auth '{auth_name}' to {token_path}")
 
-    def load_tokens(self, platform: str, auth_name: str, token_path: Optional[str] = None) -> Optional[dict[str, Any]]:
+    def load_tokens(self, platform: str, auth_name: str, token_path: str | None = None) -> dict[str, Any] | None:
         """
         Load authentication tokens from a JSON file.
         Generic method for loading persisted authentication tokens. Returns None
@@ -335,6 +342,116 @@ class XWApiAgent(AApiAgent):
     # ============================================================================
     # Authentication Revival (Category 12) - Reload and refresh auth configs
     # ============================================================================
+
+    def register_revival_step(
+        self, step_id: str, title: str, runner: Callable[[Any], list[str]]
+    ) -> None:
+        """
+        Register a subsystem for /revive user_report. ``runner`` receives this agent and returns
+        plain-text lines (no leading indent). Call from agent __init__ after super().__init__.
+        """
+        self._revival_steps.append((step_id, title, runner))
+
+    def list_revival_step_titles(self) -> list[tuple[str, str]]:
+        """(step_id, title) for custom steps only (not the auto xwauth/token blocks)."""
+        return [(sid, title) for sid, title, _ in self._revival_steps]
+
+    @staticmethod
+    def _revival_truncate(text: str, limit: int = 240) -> str:
+        msg = (text or "").strip().replace("\n", " ")
+        if len(msg) <= limit:
+            return msg
+        return msg[: limit - 1] + "…"
+
+    @staticmethod
+    def _revival_indent(lines: list[str], prefix: str = "   ") -> list[str]:
+        out: list[str] = []
+        for line in lines:
+            if not line.strip():
+                out.append("")
+            else:
+                out.append(prefix + line)
+        return out
+
+    def _token_json_paths(self, platform: str, auth_name: str) -> list[Path]:
+        """Paths to try for token.json (cwd-relative default + optional agent dir_data)."""
+        paths: list[Path] = [
+            Path(self.DEFAULT_AUTH_DIR) / platform / auth_name / "token.json",
+        ]
+        dd = getattr(self, "dir_data", None)
+        if dd:
+            paths.append(Path(dd) / "xwauth" / platform / auth_name / "token.json")
+        return paths
+
+    def _revival_lines_probe_token(self, platform: str, auth_name: str) -> list[str]:
+        """Reconnect check using saved token files only (no live API)."""
+        for p in self._token_json_paths(platform, auth_name):
+            if p.is_file():
+                return [
+                    "Reconnect: OK — saved token file exists.",
+                    f"Location: {p}",
+                ]
+        return [
+            "Reconnect: no token file yet.",
+            "Re-authenticate: sign in or refresh so token.json can be written.",
+        ]
+
+    def _compose_revival_user_report(self, reload_result: dict[str, Any]) -> str:
+        """
+        Human-readable revive summary: what was tried per subsystem (reload, each auth pair,
+        then registered runners e.g. Live.me HTTP sessions).
+        """
+        lines: list[str] = [
+            "Revive — what the bot checked",
+            "",
+            "For each item below we try in order:",
+            "  1) Reconnect — use configs/tokens already on disk or an existing live session.",
+            "  2) Re-authenticate — login or token refresh if reconnect is not enough.",
+            "  3) If something still fails, the error is shown under that item.",
+            "",
+        ]
+        n = 1
+        lines.append(f"[{n}] Configuration files (xwauth / config.json reload)")
+        n += 1
+        if reload_result.get("success") and (reload_result.get("reloaded_count") or 0) > 0:
+            lines.append(
+                f"   Result: OK — loaded {reload_result['reloaded_count']} config(s) across "
+                f"{len(reload_result.get('platforms') or [])} platform(s)."
+            )
+            for plat in sorted((reload_result.get("auths") or {}).keys()):
+                names = ", ".join(sorted(reload_result["auths"][plat]))
+                lines.append(f"   {plat}: {names}")
+        else:
+            lines.append("   Result: problem — nothing loaded or reload failed.")
+            for err in reload_result.get("errors") or []:
+                lines.append(f"   · {self._revival_truncate(str(err))}")
+
+        auths = reload_result.get("auths") or {}
+        for plat in sorted(auths.keys()):
+            for auth_name in sorted(auths[plat]):
+                lines.append("")
+                lines.append(f"[{n}] Saved tokens — platform «{plat}», account «{auth_name}»")
+                n += 1
+                lines.extend(self._revival_indent(self._revival_lines_probe_token(plat, auth_name)))
+
+        for step_id, title, runner in self._revival_steps:
+            lines.append("")
+            lines.append(f"[{n}] {title}")
+            n += 1
+            try:
+                sub = runner(self)
+                if sub:
+                    lines.extend(self._revival_indent(sub))
+                else:
+                    lines.append("   (no details)")
+            except Exception as e:
+                logger.warning("Revival step %s failed: %s", step_id, e, exc_info=True)
+                lines.extend(self._revival_indent([f"Failed: {self._revival_truncate(str(e))}"]))
+
+        lines.append("")
+        lines.append("End of revive.")
+        return "\n".join(lines)
+
     @XWAction(
         operationId="auth.reviveAuths",
         api_name="revive_auths",
@@ -346,67 +463,65 @@ class XWApiAgent(AApiAgent):
         roles=["admin", "owner"],
         audit=True
     )
-
-    def revive_auths(self, base_path: Optional[str] = None, use_storage: bool = False) -> dict[str, Any]:
-            """
-            Revive (reload) all authentication configurations.
-            This method reloads all authentication configurations from either:
-            - Local file system: data/xwauth/{platform}/{auth_name}/config.json
-            - xwstorage: If use_storage is True and xwstorage is available
-            Args:
-                base_path: Optional base path for local auth configs (default: "data/xwauth")
-                use_storage: If True, attempt to use xwstorage (requires xwstorage to be available)
-            Returns:
-                Dictionary containing revival status:
-                {
-                    "success": bool,
-                    "reloaded_count": int,
-                    "platforms": list[str],
-                    "auths": dict[str, list[str]],  # {platform: [auth_names]}
-                    "errors": list[str],
-                    "storage_used": bool
-                }
-            """
-            result = {
-                "success": True,
-                "reloaded_count": 0,
-                "platforms": [],
-                "auths": {},
-                "errors": [],
-                "storage_used": False
+    def revive_auths(self, base_path: str = "", use_storage: bool = False) -> dict[str, Any]:
+        """
+        Revive (reload) all authentication configurations.
+        This method reloads all authentication configurations from either:
+        - Local file system: data/xwauth/{platform}/{auth_name}/config.json
+        - xwstorage: If use_storage is True and xwstorage is available
+        Args:
+            base_path: Optional base path for local auth configs (default: "data/xwauth")
+            use_storage: If True, attempt to use xwstorage (requires xwstorage to be available)
+        Returns:
+            Dictionary containing revival status plus ``user_report`` (plain text for bots/CLI):
+            {
+                "success": bool,
+                "reloaded_count": int,
+                "platforms": list[str],
+                "auths": dict[str, list[str]],
+                "errors": list[str],
+                "storage_used": bool,
+                "user_report": str,
             }
-            try:
-                # Try xwstorage if requested
-                if use_storage:
-                    # Optional xwstorage integration
-                    from exonware.xwstorage import XWStorage
-                    # If xwstorage is available, could load from storage here
-                    # For now, this is a placeholder for future xwstorage integration
-                    logger.info("xwstorage integration not yet implemented, falling back to local path")
-                    result["storage_used"] = False
-                # Use local path (default behavior)
-                if base_path is None:
-                    base_path = self.DEFAULT_AUTH_DIR
-                # Clear existing configs before reloading
-                old_count = sum(len(auths) for auths in self._auth_configs.values())
-                # Reload all auth configs
-                reloaded_configs = self.load_all_auth_configs(base_path=base_path)
-                # Count reloaded configs
-                result["reloaded_count"] = sum(len(auths) for auths in reloaded_configs.values())
-                result["platforms"] = list(reloaded_configs.keys())
-                # Build auth names per platform
-                for platform, auth_configs in reloaded_configs.items():
-                    result["auths"][platform] = list(auth_configs.keys())
-                logger.info(f"Revived {result['reloaded_count']} auth configs from {len(result['platforms'])} platforms")
-                if result["reloaded_count"] == 0:
-                    result["errors"].append(f"No auth configs found in {base_path}")
-                    result["success"] = False
-            except Exception as e:
-                error_msg = f"Failed to revive auth configs: {str(e)}"
-                logger.error(error_msg, exc_info=True)
-                result["errors"].append(error_msg)
+        """
+        result: dict[str, Any] = {
+            "success": True,
+            "reloaded_count": 0,
+            "platforms": [],
+            "auths": {},
+            "errors": [],
+            "storage_used": False,
+        }
+        try:
+            if use_storage:
+                logger.info("xwstorage integration not yet implemented, falling back to local path")
+                result["storage_used"] = False
+            if base_path is None or (isinstance(base_path, str) and not base_path.strip()):
+                base_path = self.DEFAULT_AUTH_DIR
+            elif isinstance(base_path, str):
+                base_path = base_path.strip()
+            else:
+                base_path = self.DEFAULT_AUTH_DIR
+            reloaded_configs = self.load_all_auth_configs(base_path=base_path)
+            result["reloaded_count"] = sum(len(auths) for auths in reloaded_configs.values())
+            result["platforms"] = list(reloaded_configs.keys())
+            for platform, auth_configs in reloaded_configs.items():
+                result["auths"][platform] = list(auth_configs.keys())
+            logger.info(
+                "Revived %s auth configs from %s platforms",
+                result["reloaded_count"],
+                len(result["platforms"]),
+            )
+            if result["reloaded_count"] == 0:
+                result["errors"].append(f"No auth configs found in {base_path}")
                 result["success"] = False
-            return result
+        except Exception as e:
+            error_msg = f"Failed to revive auth configs: {str(e)}"
+            logger.error(error_msg, exc_info=True)
+            result["errors"].append(error_msg)
+            result["success"] = False
+        result["user_report"] = self._compose_revival_user_report(result)
+        return result
     # ============================================================================
     # Session Management (Category 4) - Generic session handling
     # ============================================================================
@@ -453,15 +568,15 @@ class XWApiAgent(AApiAgent):
         logger.warning("Session not authenticated, login may be required")
         return False
     # ============================================================================
-    # Entity Management (Category 5) - Generic multi-entity support using xwauth
+    # Entity Management (Category 5) - Generic multi-entity support (built-in managers)
     # ============================================================================
     @property
 
-    def session(self) -> Optional[Any]:
+    def session(self) -> Any | None:
         """
         Get default session from first available entity.
         Generic property that works with any entity type (agencies, accounts, users, etc.).
-        Uses xwauth EntitySessionManager for session management.
+        Uses the built-in ``EntitySessionManager`` for session management.
         Returns:
             Session object or None if no entities exist
         """
@@ -472,11 +587,11 @@ class XWApiAgent(AApiAgent):
         """
         Get entities dictionary (generic - can be agencies, accounts, users, etc.).
         Returns:
-            Dictionary of entities managed by xwauth EntitySessionManager
+            Dictionary of entities managed by the session manager
         """
         return self._entities
 
-    def get_entity_session(self, entity_name: str) -> Optional[Any]:
+    def get_entity_session(self, entity_name: str) -> Any | None:
         """
         Get session for a specific entity.
         Args:
@@ -495,7 +610,7 @@ class XWApiAgent(AApiAgent):
         """
         self._entity_session_manager.set_entity(entity_name, entity_data)
 
-    def get_entity(self, entity_name: str) -> Optional[dict[str, Any]]:
+    def get_entity(self, entity_name: str) -> dict[str, Any] | None:
         """
         Get entity data.
         Args:
@@ -505,10 +620,10 @@ class XWApiAgent(AApiAgent):
         """
         return self._entity_session_manager.get_entity(entity_name)
 
-    def merge_auth_credentials(self, platform: str, data_dir: Optional[str] = None) -> None:
+    def merge_auth_credentials(self, platform: str, data_dir: str | None = None) -> None:
         """
-        Merge auth credentials from xwauth configs into entities.
-        Generic method that delegates to xwauth OAuth2ClientManager.
+        Merge auth credentials from on-disk auth configs into entities.
+        Delegates to the built-in ``OAuth2ClientManager``.
         Works with any entity type and platform.
         Args:
             platform: Platform name (e.g., 'liveme', 'google')
@@ -529,11 +644,11 @@ class XWApiAgent(AApiAgent):
         self,
         token_url: str,
         entity_name: str,
-        grant_type: Optional[str] = None
+        grant_type: str | None = None
     ) -> dict[str, Any]:
         """
         Request OAuth 2.0 token for an entity.
-        Generic method that delegates to xwauth OAuth2ClientManager.
+        Delegates to the built-in ``OAuth2ClientManager``.
         Args:
             token_url: OAuth 2.0 token endpoint URL
             entity_name: Name of the entity
@@ -557,8 +672,8 @@ class XWApiAgent(AApiAgent):
         self,
         url: str,
         method: str = "GET",
-        authorization: Optional[str] = None,
-        cookie: Optional[str] = None,
+        authorization: str | None = None,
+        cookie: str | None = None,
         **kwargs
     ) -> dict[str, Any]:
         """
@@ -600,8 +715,8 @@ class XWApiAgent(AApiAgent):
         self,
         session: Any,
         url: str,
-        payload: Optional[dict | str] = None,
-        headers: Optional[dict[str, Any]] = None,
+        payload: dict | str | None = None,
+        headers: dict[str, Any] | None = None,
         **kwargs
     ) -> Any:
         """
@@ -629,7 +744,7 @@ class XWApiAgent(AApiAgent):
         self,
         session: Any,
         url: str,
-        headers: Optional[dict[str, Any]] = None,
+        headers: dict[str, Any] | None = None,
         **kwargs
     ) -> Any:
         """
@@ -653,7 +768,7 @@ class XWApiAgent(AApiAgent):
         self,
         session: Any,
         url: str,
-        headers: Optional[dict[str, Any]] = None,
+        headers: dict[str, Any] | None = None,
         **kwargs
     ) -> Any:
         """

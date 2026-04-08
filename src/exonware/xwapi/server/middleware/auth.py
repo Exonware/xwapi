@@ -7,19 +7,31 @@ Validates tokens and injects user context into request state.
 Company: eXonware.com
 Author: eXonware Backend Team
 Email: connect@exonware.com
-Version: 0.9.0.3
+Version: 0.9.0.4
 """
 
-from typing import Callable, Optional, Any
+from typing import Any
+
+from collections.abc import Callable
 from starlette.requests import Request
 from starlette.responses import Response
 from starlette.exceptions import HTTPException
 from starlette import status
+from exonware.xwsystem.security.auth_helpers import (
+    resolve_bearer_or_cookie_token,
+    resolve_principal_from_auth_provider,
+)
+from exonware.xwsystem.security.normalization import (
+    claims_from_principal,
+    policy_context_from_principal,
+    policy_context_to_dict,
+    tenant_id_from_principal,
+)
 async def auth_middleware(
     request: Request,
     call_next: Callable,
     require_auth: bool = False,
-    auth_provider: Optional[Any] = None,
+    auth_provider: Any | None = None,
 ) -> Response:
     """
     Authentication middleware.
@@ -43,29 +55,25 @@ async def auth_middleware(
         HTTPException: If require_auth=True and authentication fails
     """
     # Try to get token from Authorization header
-    token: Optional[str] = None
-    authorization = request.headers.get("Authorization")
-    if authorization and authorization.startswith("Bearer "):
-        token = authorization[7:]  # Remove "Bearer " prefix
-    # Try to get token from cookie
-    if not token:
-        token = request.cookies.get("session_token") or request.cookies.get("access_token")
+    token = resolve_bearer_or_cookie_token(
+        authorization=request.headers.get("Authorization"),
+        cookies=request.cookies,
+    )
     # Validate token if present
     if token and auth_provider:
         try:
-            # Use xwauth to validate token
-            user = await auth_provider.validate_token(token)
+            # Use provider contract with backward compatibility fallbacks.
+            user = await resolve_principal_from_auth_provider(auth_provider, token)
             if user:
                 request.state.user = user
                 request.state.authenticated = True
-                # Extract tenant_id if available
-                if hasattr(user, "tenant_id"):
-                    request.state.tenant_id = user.tenant_id
-                elif hasattr(user, "claims") and "tid" in user.claims:
-                    request.state.tenant_id = user.claims["tid"]
-                # Store claims if JWT
-                if hasattr(user, "claims"):
-                    request.state.claims = user.claims
+                # Extract tenant_id consistently from normalized principal/claims.
+                request.state.tenant_id = tenant_id_from_principal(user)
+                claims = claims_from_principal(user)
+                if claims:
+                    request.state.claims = claims
+                policy_context = policy_context_from_principal(user)
+                request.state.policy_context = policy_context_to_dict(policy_context)
         except Exception:
             # Token validation failed, but we continue if require_auth=False
             if require_auth:
@@ -84,8 +92,7 @@ async def auth_middleware(
     response = await call_next(request)
     return response
 
-
-def require_auth_dependency(auth_provider: Optional[Any] = None):
+def require_auth_dependency(auth_provider: Any | None = None):
     """
     Dependency function for route-level authentication.
     Usage:
@@ -110,15 +117,16 @@ def require_auth_dependency(auth_provider: Optional[Any] = None):
 
     async def get_current_user(
         request: Request,
-        credentials: Optional[HTTPAuthorizationCredentials] = Depends(security)
+        credentials: HTTPAuthorizationCredentials | None = Depends(security)
     ) -> Any:
         """Get current authenticated user."""
-        token: Optional[str] = None
         if credentials:
             token = credentials.credentials
         else:
-            # Try cookie
-            token = request.cookies.get("session_token") or request.cookies.get("access_token")
+            token = resolve_bearer_or_cookie_token(
+                authorization=request.headers.get("Authorization"),
+                cookies=request.cookies,
+            )
         if not token:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
@@ -126,7 +134,7 @@ def require_auth_dependency(auth_provider: Optional[Any] = None):
             )
         if auth_provider:
             try:
-                user = await auth_provider.validate_token(token)
+                user = await resolve_principal_from_auth_provider(auth_provider, token)
                 if not user:
                     raise HTTPException(
                         status_code=status.HTTP_401_UNAUTHORIZED,

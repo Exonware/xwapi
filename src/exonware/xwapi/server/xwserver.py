@@ -1,16 +1,20 @@
 #!/usr/bin/env python3
 """
 #exonware/xwapi/src/exonware/xwapi/server/xwserver.py
-XWApiServer - Concrete API Server Implementation
-Concrete implementation of AApiServer with engine support.
-Provides all server functionality directly.
+XWApiServer — production server for *exposable actions* and HTTP APIs.
+
+Registers and serves ``XWAction`` operations through pluggable **server engines** (FastAPI by
+default for OpenAPI/ASGI; Flask as an alternate WSGI engine). Same action contracts; choose
+the engine when constructing the server. *Build once, publish anywhere* applies to how you
+author actions/entities; HTTP engine selection is a deployment concern.
+
 Company: eXonware.com
 Author: eXonware Backend Team
 Email: connect@exonware.com
-Version: 0.9.0.3
+Version: 0.9.0.4
 """
 
-from typing import Any, Optional
+from typing import Any
 import sys
 import os
 import socket
@@ -41,14 +45,14 @@ from exonware.xwsystem import JsonSerializer, get_logger
 from exonware.xwapi.client.engines import api_agent_engine_registry, IApiAgentEngine
 logger = get_logger(__name__)
 
-
 class XWApiServer(AApiServer):
     """
-    Concrete API Server implementation.
-    Extends AApiServer and provides all server functionality directly.
-    Uses Strategy pattern to switch between different web frameworks
-    (FastAPI, Flask, etc.) while maintaining a consistent interface.
-    Integrates with XWAction's engine system for action execution.
+    Concrete API server: publish exposable actions over a chosen HTTP engine.
+
+    Strategy pattern over registered engines (``fastapi``, ``flask``, …) so you keep one
+    action model and swap framework at construction time. FastAPI unlocks the full async/OpenAPI
+    stack; Flask supports WSGI-oriented deployments. Integrates with XWAction engines for routes.
+
     Example:
         >>> from exonware.xwapi import XWApiServer, XWAPIConfig
         >>> from exonware.xwaction import XWAction
@@ -66,17 +70,17 @@ class XWApiServer(AApiServer):
     def __init__(
         self,
         engine: str = "fastapi",
-        config: Optional[XWAPIConfig] = None,
-        server_id: Optional[str] = None,
+        config: XWAPIConfig | None = None,
+        server_id: str | None = None,
         max_instances: int = 1,
-        runtime_dir: Optional[str] = None,
-        services: Optional[Any] = None,
-        auth: Optional[Any] = None,
-        storage: Optional[Any] = None,
-        auth_provider: Optional[Any] = None,
-        storage_provider: Optional[Any] = None,
-        payment_provider: Optional[Any] = None,
-        admin_token: Optional[str] = None,
+        runtime_dir: str | None = None,
+        services: Any | None = None,
+        auth: Any | None = None,
+        storage: Any | None = None,
+        auth_provider: Any | None = None,
+        storage_provider: Any | None = None,
+        payment_provider: Any | None = None,
+        admin_token: str | None = None,
         **kwargs
     ):
         """
@@ -123,7 +127,7 @@ class XWApiServer(AApiServer):
         from exonware.xwapi.server.governance import create_lockfile_manager
         self._lockfile_manager = create_lockfile_manager(self._server_id, runtime_dir)
         # Get engine strategy from registry
-        self._engine: Optional[IApiServerEngine] = api_server_engine_registry.get_engine(engine)
+        self._engine: IApiServerEngine | None = api_server_engine_registry.get_engine(engine)
         if not self._engine:
             available = ", ".join(api_server_engine_registry.list_engines())
             raise XWAPIError(
@@ -190,6 +194,12 @@ class XWApiServer(AApiServer):
             *extra_exempt,
         }
         self._api_token_scope_rules: list[dict[str, Any]] = []
+        self._tenant_reject_conflicting_override = (
+            os.environ.get("XWAPI_TENANT_REJECT_CONFLICTING_OVERRIDE", "").strip().lower() in {"1", "true", "yes", "on"}
+        )
+        self._tenant_require_authenticated_source = (
+            os.environ.get("XWAPI_TENANT_REQUIRE_AUTH_SOURCE", "").strip().lower() in {"1", "true", "yes", "on"}
+        )
 
         # Initialize core state BEFORE engine/app creation so attributes exist
         # even if engines access them during startup.
@@ -265,10 +275,10 @@ class XWApiServer(AApiServer):
         # Track server state
         self._is_running = False
         self._services_running = False
-        self._host: Optional[str] = None
-        self._port: Optional[int] = None
+        self._host: str | None = None
+        self._port: int | None = None
         # Services configuration (for xwauth-style services)
-        self._services_config: Optional[Any] = None
+        self._services_config: Any | None = None
         self._auth_instance = auth
         # Auto-register services if provided
         if services is not None:
@@ -490,7 +500,7 @@ class XWApiServer(AApiServer):
         }
 
     @staticmethod
-    def _invoke_action_callable(action: Any, args: Optional[list[Any]] = None, kwargs: Optional[dict[str, Any]] = None) -> Any:
+    def _invoke_action_callable(action: Any, args: list[Any] | None = None, kwargs: dict[str, Any] | None = None) -> Any:
         """Invoke sync/async action callables from pipeline jobs."""
         call_args = list(args or [])
         call_kwargs = dict(kwargs or {})
@@ -508,7 +518,7 @@ class XWApiServer(AApiServer):
         job_type: str,
         payload: dict[str, Any],
         *,
-        run_after: Optional[Any] = None,
+        run_after: Any | None = None,
         max_attempts: int = 5,
     ) -> str:
         """Enqueue a job into the outbox layer."""
@@ -523,8 +533,8 @@ class XWApiServer(AApiServer):
         self,
         action_name: str,
         *,
-        args: Optional[list[Any]] = None,
-        kwargs: Optional[dict[str, Any]] = None,
+        args: list[Any] | None = None,
+        kwargs: dict[str, Any] | None = None,
         max_attempts: int = 5,
     ) -> str:
         """Enqueue execution of a registered action via the background worker."""
@@ -559,8 +569,8 @@ class XWApiServer(AApiServer):
         subject_id: str,
         name: str,
         scopes: list[str],
-        expires_in_seconds: Optional[int] = None,
-        metadata: Optional[dict[str, Any]] = None,
+        expires_in_seconds: int | None = None,
+        metadata: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         return await self._token_manager.create_token(
             subject_id=subject_id,
@@ -573,7 +583,7 @@ class XWApiServer(AApiServer):
     async def revoke_api_token(self, token_id: str) -> bool:
         return await self._token_manager.revoke_token(token_id)
 
-    async def list_api_tokens(self, subject_id: Optional[str] = None) -> list[dict[str, Any]]:
+    async def list_api_tokens(self, subject_id: str | None = None) -> list[dict[str, Any]]:
         return await self._token_manager.list_tokens(subject_id=subject_id)
 
     async def record_api_token_usage(
@@ -582,7 +592,7 @@ class XWApiServer(AApiServer):
         token_id: str,
         amount: float,
         operation: str,
-        metadata: Optional[dict[str, Any]] = None,
+        metadata: dict[str, Any] | None = None,
         idempotency_key: str | None = None,
     ) -> dict[str, Any]:
         return await self._token_manager.record_usage(
@@ -599,7 +609,7 @@ class XWApiServer(AApiServer):
         subject_id: str,
         amount: float,
         currency: str = "USD",
-        metadata: Optional[dict[str, Any]] = None,
+        metadata: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         return await self._token_manager.recharge(
             subject_id=subject_id,
@@ -688,10 +698,10 @@ class XWApiServer(AApiServer):
     def register_action(
         self,
         action: Any,
-        path: Optional[str] = None,
+        path: str | None = None,
         method: str = "POST",
-        route_info: Optional[dict[str, Any]] = None,
-        required_scopes: Optional[list[str]] = None,
+        route_info: dict[str, Any] | None = None,
+        required_scopes: list[str] | None = None,
     ) -> bool:
         """
         Register XWAction as API endpoint/route.
@@ -1085,7 +1095,7 @@ class XWApiServer(AApiServer):
         self.start(host=host, port=port)
         logger.info("Server restarted successfully")
 
-    def run(self, host: Optional[str] = None, port: Optional[int] = None, **kwargs) -> None:
+    def run(self, host: str | None = None, port: int | None = None, **kwargs) -> None:
         """
         Run the server (alias for start).
         Starts the server and blocks until stopped.
@@ -1104,8 +1114,8 @@ class XWApiServer(AApiServer):
     def register_services(
         self,
         services: Any,
-        auth: Optional[Any] = None,
-        issuer: Optional[str] = None
+        auth: Any | None = None,
+        issuer: str | None = None
     ) -> None:
         """
         Register services from a services module/provider.
@@ -1335,11 +1345,11 @@ class XWApiServer(AApiServer):
             profile=ActionProfile.ENDPOINT,
         )
         async def server_tokens_create(
-            subject_id: Optional[str] = None,
-            name: Optional[str] = None,
-            scopes: Optional[list[str]] = None,
-            expires_in_seconds: Optional[int] = None,
-            metadata: Optional[dict[str, Any]] = None,
+            subject_id: str | None = None,
+            name: str | None = None,
+            scopes: list[str] | None = None,
+            expires_in_seconds: int | None = None,
+            metadata: dict[str, Any] | None = None,
             request: Any = None,
         ) -> dict[str, Any]:
             payload: dict[str, Any] = {}
@@ -1375,7 +1385,7 @@ class XWApiServer(AApiServer):
             engine=action_engine,
             profile=ActionProfile.ENDPOINT,
         )
-        async def server_tokens_list(subject_id: Optional[str] = None, request: Any = None) -> dict[str, Any]:
+        async def server_tokens_list(subject_id: str | None = None, request: Any = None) -> dict[str, Any]:
             resolved_subject_id = str(subject_id or "")
             if isinstance(request, dict):
                 resolved_subject_id = resolved_subject_id or str(request.get("subject_id") or "")
@@ -1393,7 +1403,7 @@ class XWApiServer(AApiServer):
             engine=action_engine,
             profile=ActionProfile.ENDPOINT,
         )
-        async def server_tokens_revoke(token_id: Optional[str] = None, request: Any = None) -> dict[str, Any]:
+        async def server_tokens_revoke(token_id: str | None = None, request: Any = None) -> dict[str, Any]:
             payload: dict[str, Any] = {}
             if isinstance(request, dict):
                 payload = request
@@ -1418,10 +1428,10 @@ class XWApiServer(AApiServer):
             profile=ActionProfile.ENDPOINT,
         )
         async def server_tokens_usage_record(
-            token_id: Optional[str] = None,
-            amount: Optional[float] = None,
-            operation: Optional[str] = None,
-            metadata: Optional[dict[str, Any]] = None,
+            token_id: str | None = None,
+            amount: float | None = None,
+            operation: str | None = None,
+            metadata: dict[str, Any] | None = None,
             request: Any = None,
         ) -> dict[str, Any]:
             payload: dict[str, Any] = {}
@@ -1455,7 +1465,7 @@ class XWApiServer(AApiServer):
             engine=action_engine,
             profile=ActionProfile.ENDPOINT,
         )
-        async def server_tokens_usage_list(token_id: Optional[str] = None, request: Any = None) -> dict[str, Any]:
+        async def server_tokens_usage_list(token_id: str | None = None, request: Any = None) -> dict[str, Any]:
             resolved_token_id = str(token_id or "")
             if isinstance(request, dict):
                 resolved_token_id = resolved_token_id or str(request.get("token_id") or "")
@@ -1476,10 +1486,10 @@ class XWApiServer(AApiServer):
             profile=ActionProfile.ENDPOINT,
         )
         async def server_tokens_recharge(
-            subject_id: Optional[str] = None,
-            amount: Optional[float] = None,
-            currency: Optional[str] = None,
-            metadata: Optional[dict[str, Any]] = None,
+            subject_id: str | None = None,
+            amount: float | None = None,
+            currency: str | None = None,
+            metadata: dict[str, Any] | None = None,
             request: Any = None,
         ) -> dict[str, Any]:
             payload: dict[str, Any] = {}
@@ -1513,7 +1523,7 @@ class XWApiServer(AApiServer):
             engine=action_engine,
             profile=ActionProfile.ENDPOINT,
         )
-        async def server_tokens_balance(subject_id: Optional[str] = None, request: Any = None) -> dict[str, Any]:
+        async def server_tokens_balance(subject_id: str | None = None, request: Any = None) -> dict[str, Any]:
             resolved_subject_id = str(subject_id or "")
             if isinstance(request, dict):
                 resolved_subject_id = resolved_subject_id or str(request.get("subject_id") or "")

@@ -1,13 +1,16 @@
 # xwapi (long version)
 
-Production-focused, engine-agnostic API layer for eXonware services.
+**Build once, publish anywhere** — production layer for **exposable actions** and entities on the eXonware stack.
 
-`xwapi` now combines:
-- entity and action exposure (`xwentity`, `xwaction`)
-- durable background action execution (Outbox + singleton worker)
-- API token generation, usage metering, and recharge
-- provider-based auth/storage/payment integration
-- consistent transport-neutral error contracts
+You author `xwaction` operations and optional `xwentity` models once, then **publish** over HTTP (OpenAPI-first; FastAPI default engine, Flask alternate). The same ideas extend to bots, consoles, or other adapters that call the same contracts. **Clients** use `XWApiAgent` and client engines to **consume** remote APIs symmetrically.
+
+`xwapi` combines:
+- **Publisher**: entity + action exposure, server engines (FastAPI / Flask), OpenAPI merge
+- **Consumer**: agents, OAuth/session helpers, action discovery
+- durable background execution (Outbox + singleton worker)
+- API token lifecycle, usage metering, recharge
+- provider-based auth/storage/payment
+- transport-neutral error contracts
 
 Short version: [README.md](README.md)
 
@@ -27,7 +30,7 @@ pip install exonware-xwapi[full]
 
 ### 1) `XWAPI` facade
 
-Use `XWAPI` when you want entity/action to API generation quickly.
+Use `XWAPI` when you want entity + exposable actions turned into an HTTP app quickly (`engine="fastapi"` or `engine="flask"`).
 
 ```python
 from exonware.xwapi import XWAPI
@@ -45,7 +48,7 @@ app = api.create_app(engine="fastapi")
 
 ### 2) `XWApiServer` runtime server
 
-Use `XWApiServer` for direct server orchestration, middleware controls, admin APIs, and pipeline/token features.
+Use `XWApiServer` for direct server orchestration, middleware controls, admin APIs, and pipeline/token features. Pass `engine="fastapi"` for ASGI/OpenAPI defaults or `engine="flask"` for WSGI-oriented deployments — same registration model, different framework.
 
 ```python
 from exonware.xwapi import XWApiServer
@@ -54,9 +57,19 @@ server = XWApiServer(engine="fastapi")
 app = server.app
 ```
 
+### 3) `XWApiAgent` (client / consumer)
+
+Use `XWApiAgent` when building **clients** or bots that own `XWAction` methods and integrate with `xwauth` flows against APIs.
+
 ---
 
 ## New features added
+
+### HTTP engines: FastAPI vs Flask
+
+- **FastAPI** (default): async ASGI, automatic OpenAPI, dependency injection, Starlette middleware.
+- **Flask**: registered alternate engine for WSGI stacks; choose at `XWAPI.create_app(...)` / `XWApiServer(...)` construction (not hot-swapping a live process).
+- See [docs/REF_24_ALTERNATIVES.md](docs/REF_24_ALTERNATIVES.md) for ecosystem comparison.
 
 ### Engine/protocol agnosticism hardening
 
@@ -164,6 +177,7 @@ pytest tests/3.advance/
 ## Documentation map
 
 - [docs/INDEX.md](docs/INDEX.md)
+- [docs/REF_24_ALTERNATIVES.md](docs/REF_24_ALTERNATIVES.md)
 - [docs/REF_13_ARCH.md](docs/REF_13_ARCH.md)
 - [docs/REF_15_API.md](docs/REF_15_API.md)
 - [docs/REF_22_PROJECT.md](docs/REF_22_PROJECT.md)
@@ -171,4 +185,4 @@ pytest tests/3.advance/
 
 ---
 
-Version: 0.0.1.1 | Updated: 31-Mar-2026
+Version: 0.9.0.3 | Updated: 05-Apr-2026

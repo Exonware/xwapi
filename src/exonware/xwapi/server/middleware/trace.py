@@ -7,10 +7,10 @@ and OpenTelemetry integration.
 Company: eXonware.com
 Author: eXonware Backend Team
 Email: connect@exonware.com
-Version: 0.9.0.3
+Version: 0.9.0.4
 """
 
-from typing import Callable
+from collections.abc import Callable
 from uuid import uuid4
 from starlette.requests import Request
 from starlette.responses import Response

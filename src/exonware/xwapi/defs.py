@@ -1,10 +1,11 @@
 #exonware/xwapi/src/exonware/xwapi/defs.py
 """
-Type definitions and constants for xwapi library.
+Types and constants shared by publishers and clients of exposable actions (OpenAPI, OAuth2).
+
 Company: eXonware.com
 Author: eXonware Backend Team
 Email: connect@exonware.com
-Version: 0.9.0.3
+Version: 0.9.0.4
 """
 
 from typing import Any, Optional

@@ -1,10 +1,19 @@
 #exonware/xwapi/src/exonware/xwapi/__init__.py
 """
-xwapi: Entity-to-Web-API Conversion Library
+xwapi: entity- and action-centric API library for the eXonware stack.
+
+Define *exposable actions* (xwaction) and entities once, then publish them over HTTP/OpenAPI
+(and align bots, consoles, or other adapters to the same contracts). The mirror direction is
+first-class: build *clients* and agents that call those actions over APIs (see XWApiAgent).
+
+Tagline: **build once, publish anywhere** — one logical surface; FastAPI is the default HTTP
+engine (full OpenAPI/async ecosystem); Flask is available as an alternate registered engine
+so you can swap deployment style without rewriting actions.
+
 Company: eXonware.com
 Author: eXonware Backend Team
 Email: connect@exonware.com
-Version: 0.9.0.3
+Version: 0.9.0.4
 """
 # =============================================================================
 # XWLAZY — GUIDE_00_MASTER: config_package_lazy_install_enabled (EARLY)

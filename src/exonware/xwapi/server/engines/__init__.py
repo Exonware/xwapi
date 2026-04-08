@@ -1,11 +1,14 @@
 #exonware/xwapi/engines/__init__.py
 """
-API Server Engine System
-Strategy pattern implementation for pluggable API server engines.
+Pluggable **server engines** for publishing exposable actions (FastAPI, Flask, …).
+
+Pick an engine when creating the app or ``XWApiServer``; default FastAPI keeps OpenAPI/ASGI
+power; Flask supports WSGI. *Build once, publish anywhere* — actions stay stable across engines.
+
 Company: eXonware.com
 Author: eXonware Backend Team
 Email: connect@exonware.com
-Version: 0.9.0.3
+Version: 0.9.0.4
 """
 
 from __future__ import annotations
@@ -28,7 +31,7 @@ class ApiServerEngineRegistry:
 
     def __init__(self):
         self._engines: dict[str, IApiServerEngine] = {}
-        self._default_engine: Optional[str] = None
+        self._default_engine: str | None = None
 
     def register(self, engine: IApiServerEngine, set_default: bool = False):
         """
@@ -42,7 +45,7 @@ class ApiServerEngineRegistry:
             self._default_engine = engine.name
         logger.info(f"Registered API server engine: {engine.name}")
 
-    def get_engine(self, name: Optional[str] = None) -> Optional[IApiServerEngine]:
+    def get_engine(self, name: str | None = None) -> IApiServerEngine | None:
         """
         Get engine by name, or default if name is None.
         Args:
@@ -153,6 +156,28 @@ class ApiServerEngineRegistry:
             self.register(imap_engine, set_default=False)
         except Exception as e:
             logger.debug(f"IMAP engine not available: {e}")
+        # Optional HTTP frameworks (install matching extras; see docs/REF_25_ENGINES.md)
+        _optional = [
+            ("starlette", "StarletteServerEngine"),
+            ("quart", "QuartServerEngine"),
+            ("sanic", "SanicServerEngine"),
+            ("aiohttp", "AiohttpServerEngine"),
+            ("blacksheep", "BlackSheepServerEngine"),
+            ("litestar", "LitestarServerEngine"),
+            ("django", "DjangoServerEngine"),
+            ("mangum", "MangumServerEngine"),
+        ]
+        try:
+            from . import optional_http_engines as _opt
+            for mod_attr, cls_name in _optional:
+                try:
+                    cls = getattr(_opt, cls_name)
+                    inst = cls()
+                    self.register(inst, set_default=False)
+                except Exception as e:
+                    logger.debug("%s engine not available: %s", mod_attr, e)
+        except Exception as e:
+            logger.debug("optional_http_engines import failed: %s", e)
 # Global registry instance
 api_server_engine_registry = ApiServerEngineRegistry()
 # Engine-agnostic: engines are auto-registered lazily on first access

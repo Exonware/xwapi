@@ -1,12 +1,14 @@
 # xwapi — Usage Guide
 
-**Last Updated:** 31-Mar-2026
+**Last Updated:** 05-Apr-2026
 
-This guide covers the current `xwapi` runtime capabilities: facade usage, server usage, action pipeline, and API token management.
+**Build once, publish anywhere:** define *exposable actions* (`xwaction`) and entities, then publish over HTTP. Default engine is **FastAPI**; use `engine="flask"` on `create_app` / `XWApiServer` for WSGI. For the **consumer** side, use `XWApiAgent` (see §4). Comparables and engine notes: [REF_24_ALTERNATIVES.md](REF_24_ALTERNATIVES.md).
+
+This guide covers facade usage, server usage, client agents, action registration, pipeline, and API tokens.
 
 ## 1) Facade-first usage (`XWAPI`)
 
-Use this path for fast entity/action to API generation.
+Fast path from entity + action lists to an HTTP app.
 
 ```python
 from exonware.xwapi import XWAPI
@@ -20,11 +22,12 @@ class User(XWEntity):
 
 api = XWAPI(entities=[User], title="Users API", version="1.0.0")
 app = api.create_app(engine="fastapi")
+# WSGI / Flask stack: api.create_app(engine="flask")
 ```
 
 ## 2) Server-first usage (`XWApiServer`)
 
-Use this path when you need runtime controls, pipeline orchestration, and admin endpoints.
+Use when you need runtime controls, pipeline orchestration, and admin endpoints. Same `engine=` switch as the facade.
 
 ```python
 from exonware.xwapi import XWApiServer
@@ -35,7 +38,7 @@ app = server.app
 
 ## 3) Register actions
 
-`xwapi` integrates with `xwaction` so action definitions become API endpoints.
+`xwapi` integrates with `xwaction` so exposable action definitions become HTTP endpoints (engine-specific binding).
 
 ```python
 from exonware.xwaction import XWAction
@@ -49,7 +52,26 @@ def ping() -> dict[str, str]:
 server.register_action(ping, path="/ping", method="GET")
 ```
 
-## 4) Pipeline (Outbox + singleton worker)
+## 4) Client usage (`XWApiAgent`)
+
+Mirror of the server: agents discover `XWAction` methods and integrate `xwauth` flows when **calling** APIs.
+
+```python
+from exonware.xwapi import XWApiAgent
+from exonware.xwaction import XWAction
+
+
+class DemoAgent(XWApiAgent):
+    @XWAction(operationId="local_echo", profile="endpoint")
+    def echo(self, text: str = "hi") -> dict[str, str]:
+        return {"text": text}
+
+
+agent = DemoAgent()
+# Register onto a server or use client patterns against remote exposable actions.
+```
+
+## 5) Pipeline (Outbox + singleton worker)
 
 ```python
 def job_handler(payload: dict[str, str]) -> dict[str, bool]:
@@ -61,7 +83,7 @@ server.start_pipeline_worker()
 server.enqueue_pipeline_job("jobs.email", {"to": "user@example.com"})
 ```
 
-## 5) API token lifecycle and usage metering
+## 6) API token lifecycle and usage metering
 
 ```python
 import asyncio
@@ -86,7 +108,7 @@ async def token_flow() -> None:
 asyncio.run(token_flow())
 ```
 
-## 6) Production environment controls
+## 7) Production environment controls
 
 Environment keys supported by server runtime:
 
@@ -96,7 +118,7 @@ Environment keys supported by server runtime:
 - `XWAPI_ALLOW_INSECURE_ADMIN`
 - `XWAPI_API_TOKEN_MIDDLEWARE`
 
-## 7) Testing
+## 8) Testing
 
 Run full layered suite:
 

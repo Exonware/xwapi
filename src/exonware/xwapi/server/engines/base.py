@@ -5,7 +5,7 @@ Base implementation for API server engines.
 Company: eXonware.com
 Author: eXonware Backend Team
 Email: connect@exonware.com
-Version: 0.9.0.3
+Version: 0.9.0.4
 """
 
 from typing import Any, Optional
@@ -28,7 +28,7 @@ class AApiServerEngineBase(ABC):
             name: Engine name (e.g., 'fastapi', 'flask')
         """
         self._name = name
-        self._config: Optional[dict[str, Any]] = None
+        self._config: dict[str, Any] | None = None
         self._action_engine_registry = None  # Lazy-loaded to avoid import cycles
     @property
 
@@ -36,7 +36,7 @@ class AApiServerEngineBase(ABC):
         """Get engine name."""
         return self._name
 
-    def _get_action_engine(self, action: Any, engine_name: Optional[str] = None) -> Optional[Any]:
+    def _get_action_engine(self, action: Any, engine_name: str | None = None) -> Any | None:
         """
         Get appropriate ActionEngine from XWAction registry.
         Args:

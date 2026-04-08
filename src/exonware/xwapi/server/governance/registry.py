@@ -5,10 +5,10 @@ Manages server instances with singleton enforcement and thread-safe access.
 Company: eXonware.com
 Author: eXonware Backend Team
 Email: connect@exonware.com
-Version: 0.9.0.3
+Version: 0.9.0.4
 """
 
-from typing import Any, Optional
+from typing import Any
 import threading
 from exonware.xwsystem import get_logger
 logger = get_logger(__name__)
@@ -111,7 +111,7 @@ class InstanceRegistry:
         with self._lock:
             return len(self._instances.get(server_id, []))
 
-    def clear(self, server_id: Optional[str] = None) -> None:
+    def clear(self, server_id: str | None = None) -> None:
         """
         Clear instances for a server_id or all server_ids.
         Args:
@@ -126,7 +126,7 @@ class InstanceRegistry:
                     del self._instances[server_id]
                     logger.debug(f"Cleared instances for server_id: {server_id}")
 # Global registry instance
-_global_registry: Optional[InstanceRegistry] = None
+_global_registry: InstanceRegistry | None = None
 _registry_lock = threading.Lock()
 
 

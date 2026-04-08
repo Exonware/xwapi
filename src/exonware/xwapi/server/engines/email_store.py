@@ -5,7 +5,7 @@ Protocol-agnostic interface for email storage used by SMTP, POP3, and IMAP engin
 Company: eXonware.com
 Author: eXonware Backend Team
 Email: connect@exonware.com
-Version: 0.9.0.3
+Version: 0.9.0.4
 """
 
 from typing import Protocol, Optional, List, Dict, Any
@@ -32,7 +32,7 @@ class IEmailStore(Protocol):
         """
         ...
 
-    def get_message(self, message_id: str) -> Optional[EmailMessage]:
+    def get_message(self, message_id: str) -> EmailMessage | None:
         """
         Get email message by ID.
         Args:
@@ -45,11 +45,11 @@ class IEmailStore(Protocol):
     def list_messages(
         self,
         mailbox: str = "INBOX",
-        username: Optional[str] = None,
+        username: str | None = None,
         unread_only: bool = False,
-        limit: Optional[int] = None,
+        limit: int | None = None,
         offset: int = 0
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """
         List emails with optional filters.
         Args:
@@ -84,7 +84,7 @@ class IEmailStore(Protocol):
         """
         ...
 
-    def get_stats(self, username: Optional[str] = None) -> Dict[str, Any]:
+    def get_stats(self, username: str | None = None) -> dict[str, Any]:
         """
         Get email statistics.
         Args:
@@ -104,8 +104,8 @@ class InMemoryEmailStore:
 
     def __init__(self):
         """Initialize in-memory email store."""
-        self._messages: Dict[str, Dict[str, Any]] = {}
-        self._mailboxes: Dict[str, List[str]] = {"INBOX": []}  # mailbox -> [message_ids]
+        self._messages: dict[str, dict[str, Any]] = {}
+        self._mailboxes: dict[str, list[str]] = {"INBOX": []}  # mailbox -> [message_ids]
 
     def store_message(self, message: EmailMessage, mailbox: str = "INBOX") -> str:
         """Store an email message."""
@@ -133,7 +133,7 @@ class InMemoryEmailStore:
         self._mailboxes[mailbox].append(message_id)
         return message_id
 
-    def get_message(self, message_id: str) -> Optional[EmailMessage]:
+    def get_message(self, message_id: str) -> EmailMessage | None:
         """Get email message by ID."""
         entry = self._messages.get(message_id)
         if entry and not entry.get("deleted", False):
@@ -143,11 +143,11 @@ class InMemoryEmailStore:
     def list_messages(
         self,
         mailbox: str = "INBOX",
-        username: Optional[str] = None,
+        username: str | None = None,
         unread_only: bool = False,
-        limit: Optional[int] = None,
+        limit: int | None = None,
         offset: int = 0
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """List emails with optional filters."""
         # Get message IDs from mailbox
         message_ids = self._mailboxes.get(mailbox, [])
@@ -200,7 +200,7 @@ class InMemoryEmailStore:
             return True
         return False
 
-    def get_stats(self, username: Optional[str] = None) -> Dict[str, Any]:
+    def get_stats(self, username: str | None = None) -> dict[str, Any]:
         """Get email statistics."""
         all_messages = [
             entry for entry in self._messages.values()

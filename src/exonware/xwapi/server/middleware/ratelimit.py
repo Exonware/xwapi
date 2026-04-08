@@ -7,10 +7,10 @@ Returns standard rate limit headers.
 Company: eXonware.com
 Author: eXonware Backend Team
 Email: connect@exonware.com
-Version: 0.9.0.3
+Version: 0.9.0.4
 """
 
-from typing import Callable, Optional
+from collections.abc import Callable
 from datetime import datetime, timedelta, timezone
 from collections import defaultdict
 from starlette.requests import Request
@@ -47,7 +47,7 @@ class RateLimiter:
         self.per_client = per_client
         self.per_tenant = per_tenant
 
-    def get_key(self, request: Request) -> Optional[str]:
+    def get_key(self, request: Request) -> str | None:
         """Get rate limit key for request."""
         parts = []
         if self.per_ip:
@@ -94,7 +94,7 @@ _default_rate_limiter = RateLimiter(
 async def rate_limit_middleware(
     request: Request,
     call_next: Callable,
-    limiter: Optional[RateLimiter] = None,
+    limiter: RateLimiter | None = None,
 ) -> Response:
     """
     Rate limiting middleware.

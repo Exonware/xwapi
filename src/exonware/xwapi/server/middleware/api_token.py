@@ -6,7 +6,9 @@ API token bearer authentication + optional usage metering middleware.
 from __future__ import annotations
 
 import hmac
-from typing import Any, Callable
+from typing import Any
+
+from collections.abc import Callable
 
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
@@ -14,18 +16,14 @@ from starlette.responses import Response
 
 from exonware.xwapi.errors import AuthenticationError, AuthorizationError, get_trace_id
 from exonware.xwapi.server.http import starlette_json_response_from_xwapi_error
+from exonware.xwsystem.security.auth_helpers import parse_authorization_bearer
 from exonware.xwsystem import get_logger
 
 logger = get_logger(__name__)
 
 
 def _extract_bearer_token(request: Request) -> str | None:
-    auth_header = request.headers.get("Authorization", "")
-    if auth_header.startswith("Bearer "):
-        token = auth_header.removeprefix("Bearer ").strip()
-        if token:
-            return token
-    return None
+    return parse_authorization_bearer(request.headers.get("Authorization"))
 
 
 def _segments(path: str) -> list[str]:

@@ -1,15 +1,20 @@
 #exonware/xwapi/src/exonware/xwapi/contracts.py
 """
-Contracts (interfaces and enums) for xwapi library.
+Contracts for servers and clients built around *exposable actions* and API surfaces.
+
+Defines protocols for endpoints, generators, agents, servers, providers, and entity stores so
+publishers (``XWApiServer``) and consumers (``XWApiAgent``) share the same vocabulary.
+
 Company: eXonware.com
 Author: eXonware Backend Team
 Email: connect@exonware.com
-Version: 0.9.0.3
+Version: 0.9.0.4
 """
 
 from typing import Protocol, runtime_checkable, Any
 from enum import Enum
 from exonware.xwaction.contracts import IActionsProvider
+from exonware.xwsystem.security.contracts import AuthContext
 
 
 class HTTPMethod(str, Enum):
@@ -29,6 +34,8 @@ class SecurityType(str, Enum):
     API_KEY = "apiKey"
     BEARER = "bearer"
     BASIC = "basic"
+
+
 @runtime_checkable
 
 class IAPIEndpoint(Protocol):
@@ -149,6 +156,13 @@ class IAuthProvider(Protocol):
         ...
 
     async def revoke_api_token(self, token_id: str) -> bool:
+        ...
+
+    async def resolve_auth_context(self, token: str) -> AuthContext | None:
+        """
+        Resolve bearer token into normalized context for request middleware.
+        Backends that do not support bearer sessions can return None.
+        """
         ...
 
 

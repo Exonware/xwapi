@@ -8,21 +8,12 @@ Version: 0.0.1.0
 """
 
 from __future__ import annotations
+
 import sys
-from pathlib import Path
 
-
-def _add_monorepo_paths() -> None:
-    """Add xwapi and xwsystem src to path for standalone run."""
-    root = Path(__file__).resolve().parent.parent
-    for pkg in ("xwapi", "xwsystem"):
-        src = root.parent / pkg / "src"
-        if src.is_dir():
-            sys.path.insert(0, str(src))
-_add_monorepo_paths()
-# GUIDE_TEST.md: ensure UTF-8 console for Windows (emojis)
 try:
     from exonware.xwsystem.console.cli import ensure_utf8_console
+
     ensure_utf8_console()
 except Exception:
     pass
@@ -31,7 +22,8 @@ except Exception:
 def test_import():
     """Test basic import of xwapi."""
     try:
-        import exonware.xwapi
+        import exonware.xwapi  # noqa: F401
+
         print("✅ xwapi import successful")
         return True
     except ImportError as e:
@@ -43,6 +35,7 @@ def test_version():
     """Test version information."""
     try:
         from exonware.xwapi import __version__, __author__, __email__
+
         print(f"✅ Version: {__version__}")
         print(f"✅ Author: {__author__}")
         print(f"✅ Email: {__email__}")
@@ -50,6 +43,8 @@ def test_version():
     except ImportError as e:
         print(f"❌ Version import failed: {e}")
         return False
+
+
 if __name__ == "__main__":
     print("Verifying xwapi installation...")
     print()

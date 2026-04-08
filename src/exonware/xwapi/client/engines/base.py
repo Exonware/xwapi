@@ -5,7 +5,7 @@ Base implementation for API agent engines.
 Company: eXonware.com
 Author: eXonware Backend Team
 Email: connect@exonware.com
-Version: 0.9.0.3
+Version: 0.9.0.4
 """
 
 from typing import Any, Optional
@@ -28,7 +28,7 @@ class AApiAgentEngineBase(ABC):
             name: Engine name (e.g., 'native', 'router', 'planner')
         """
         self._name = name
-        self._config: Optional[dict[str, Any]] = None
+        self._config: dict[str, Any] | None = None
     @property
 
     def name(self) -> str:

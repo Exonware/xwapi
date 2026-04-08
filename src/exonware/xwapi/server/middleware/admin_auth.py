@@ -6,7 +6,9 @@ Admin control-plane token authentication middleware for XWApiServer.
 from __future__ import annotations
 
 import hmac
-from typing import Any, Callable
+from typing import Any
+
+from collections.abc import Callable
 
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
@@ -14,15 +16,14 @@ from starlette.responses import Response
 
 from exonware.xwapi.errors import AuthenticationError, get_trace_id
 from exonware.xwapi.server.http import starlette_json_response_from_xwapi_error
+from exonware.xwsystem.security.auth_helpers import parse_authorization_bearer
 
 
 def _extract_admin_token(request: Request) -> str | None:
     """Extract admin token from supported headers."""
-    auth_header = request.headers.get("Authorization", "")
-    if auth_header.startswith("Bearer "):
-        token = auth_header.removeprefix("Bearer ").strip()
-        if token:
-            return token
+    token = parse_authorization_bearer(request.headers.get("Authorization"))
+    if token:
+        return token
     token = request.headers.get("X-Admin-Token", "").strip()
     return token or None
 

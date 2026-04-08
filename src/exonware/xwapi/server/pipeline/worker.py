@@ -10,7 +10,9 @@ import inspect
 import threading
 import time
 from threading import Event, RLock, Thread
-from typing import Any, Callable, Optional
+from typing import Any
+
+from collections.abc import Callable
 
 from exonware.xwapi.server.pipeline.outbox import AOutboxStore, OutboxJob
 from exonware.xwsystem import get_logger
@@ -24,7 +26,7 @@ class BackgroundWorker:
     """Single active worker process-wide for safe serialized execution."""
 
     _singleton_lock = RLock()
-    _active_owner: Optional[str] = None
+    _active_owner: str | None = None
 
     def __init__(
         self,
@@ -41,7 +43,7 @@ class BackgroundWorker:
         self._lease_seconds = max(1, int(lease_seconds))
         self._batch_size = max(1, int(batch_size))
         self._handlers: dict[str, JobHandler] = {}
-        self._thread: Optional[Thread] = None
+        self._thread: Thread | None = None
         self._stop_event = Event()
         self._local_lock = RLock()
 

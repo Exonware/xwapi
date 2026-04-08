@@ -1,11 +1,14 @@
 #exonware/xwapi/engines/flask.py
 """
-Flask Server Engine Implementation
-Flask-based API server engine using XWAction's FlaskActionEngine.
+Alternate HTTP **server engine**: Flask (WSGI) for the same exposable-action registration model.
+
+Swap with ``engine="flask"`` at app/server construction when deployment targets WSGI stacks;
+default remains FastAPI for OpenAPI/async-first apps.
+
 Company: eXonware.com
 Author: eXonware Backend Team
 Email: connect@exonware.com
-Version: 0.9.0.3
+Version: 0.9.0.4
 """
 
 from typing import Any, Optional
@@ -17,8 +20,8 @@ from exonware.xwapi.config import XWAPIConfig
 from exonware.xwapi.errors import (
     XWAPIError,
     InternalError,
-    ERROR_STATUS_MAP,
     create_error_response,
+    get_http_status_code,
 )
 from exonware.xwsystem import get_logger
 logger = get_logger(__name__)
@@ -34,7 +37,7 @@ class FlaskServerEngine(AHttpServerEngineBase):
     def __init__(self):
         """Initialize Flask server engine."""
         super().__init__("flask")
-        self._app: Optional[Any] = None
+        self._app: Any | None = None
         self._protocol_type = ProtocolType.HTTP_REST  # Flask is HTTP REST
     @property
 
@@ -117,7 +120,7 @@ class FlaskServerEngine(AHttpServerEngineBase):
         @app.errorhandler(XWAPIError)
         def handle_xwapi_error(exc):
             trace_id = get_trace_id()
-            status_code = ERROR_STATUS_MAP.get(exc.code, 500)
+            status_code = get_http_status_code(exc)
             # Log error
             logger.error(
                 f"API error: {exc.code} - {exc.message}",

@@ -5,7 +5,7 @@ HTTP response adapter for XWAPIError objects.
 
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Any
 
 from starlette.responses import JSONResponse
 
@@ -14,10 +14,10 @@ from exonware.xwapi.errors import XWAPIError, xwapi_error_to_http_parts
 
 def starlette_json_response_from_xwapi_error(
     error: XWAPIError,
-    request: Optional[Any] = None,
+    request: Any | None = None,
     *,
     include_details: bool = True,
-    extra_headers: Optional[dict[str, str]] = None,
+    extra_headers: dict[str, str] | None = None,
 ) -> JSONResponse:
     """
     Render an XWAPIError as Starlette-compatible JSONResponse.

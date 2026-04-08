@@ -1,14 +1,13 @@
 #!/usr/bin/env python3
 """
-#exonware/xwapi/src/exonware/xwapi/openapi.py
-OpenAPI Management (Engine-Agnostic)
-Build and merge OpenAPI schemas from multiple modules, export unified OpenAPI spec,
-schema validation, and version management.
-Engine-specific OpenAPI export is handled by engine implementations.
+OpenAPI merge/export/validation for *published* exposable actions (engine-agnostic helpers).
+
+Engine-specific document generation still lives in HTTP engines (FastAPI, …).
+
 Company: eXonware.com
 Author: eXonware Backend Team
 Email: connect@exonware.com
-Version: 0.9.0.3
+Version: 0.9.0.4
 """
 
 from typing import Any, Optional
@@ -67,7 +66,7 @@ def merge_openapi_schemas(schemas: list[dict[str, Any]]) -> dict[str, Any]:
     return merged
 
 
-def validate_openapi_schema(schema: dict[str, Any]) -> tuple[bool, Optional[str]]:
+def validate_openapi_schema(schema: dict[str, Any]) -> tuple[bool, str | None]:
     """
     Validate OpenAPI schema structure.
     Checks for required fields and basic structure compliance.
@@ -101,7 +100,7 @@ def validate_openapi_schema(schema: dict[str, Any]) -> tuple[bool, Optional[str]
 def export_openapi_schema(
     app: Any,  # Engine-agnostic: accepts any framework app
     format: str = "json",
-    path: Optional[str] = None
+    path: str | None = None
 ) -> str | dict[str, Any]:
     """
     Export OpenAPI schema from framework app (engine-agnostic).
@@ -136,7 +135,7 @@ def export_openapi_schema(
             else:
                 # For non-JSON, load back as string
                 try:
-                    with open(path, 'r') as f:
+                    with open(path) as f:
                         return f.read()
                 except Exception:
                     return schema
@@ -185,7 +184,7 @@ def add_openapi_metadata(schema: dict[str, Any], metadata: dict[str, Any]) -> di
     return schema
 
 
-def get_openapi_version(schema: dict[str, Any]) -> Optional[str]:
+def get_openapi_version(schema: dict[str, Any]) -> str | None:
     """
     Get OpenAPI version from schema.
     Args:

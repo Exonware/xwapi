@@ -4,7 +4,9 @@ import pytest
 from fastapi.testclient import TestClient
 
 from exonware.xwapi import XWAPI
-from exonware.xwentity import XWEntity
+# Import from implementation module so tests do not depend on exonware.xwentity __init__
+# ordering vs. lazy hooks when the full stack is assembled from editable installs.
+from exonware.xwentity.entity import XWEntity
 
 
 class User(XWEntity):

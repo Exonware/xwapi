@@ -1,12 +1,9 @@
 #exonware/xwapi/src/exonware/xwapi/server/__init__.py
 """
-Server package for xwapi library.
-Contains all server-related functionality:
-- XWApiServer: Main server implementation
-- engines/: Server engine implementations (FastAPI, Flask, etc.)
-- admin/: Admin endpoints
-- middleware/: Server middleware (auth, rate limiting, etc.)
-- governance/: Instance governance (registry, lockfile)
+Server package: **publish** exposable actions over HTTP (FastAPI default, Flask engine, …).
+
+Includes engines, admin, middleware, governance, and pipeline helpers. Pair with
+``exonware.xwapi.client`` for the consumer side.
 """
 
 from exonware.xwapi.server.xwserver import XWApiServer

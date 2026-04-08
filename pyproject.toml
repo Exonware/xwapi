@@ -1,5 +1,4 @@
-
-# Source size (src/*): ~475.6 KB
+# Source size (src/*): ~535.6 KB
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
@@ -7,15 +6,15 @@ build-backend = "hatchling.build"
 [project]
 name = "exonware-xwapi"
 dynamic = ["version"]
-description = "Entity-to-Web-API conversion library: Python framework that turns internal configuration, service functions, and entities into production-ready APIs using FastAPI, with minimal boilerplate"
+description = "Entity- and action-centric API layer: build once, publish anywhere — expose XWAction/XWEntity over HTTP (FastAPI default, Flask engine) and consume the same contracts from client agents; OpenAPI, middleware, and production ops for the eXonware stack."
 readme = "README.md"
 requires-python = ">=3.12"
-keywords = ["api", "fastapi", "openapi", "rest", "graphql", "oauth2", "exonware"]
+keywords = ["api", "fastapi", "flask", "openapi", "rest", "graphql", "oauth2", "exonware", "actions", "agent", "client-server"]
 classifiers = [
   "Development Status :: 4 - Beta",
   "Intended Audience :: Developers",
   "Intended Audience :: Information Technology",
-  "License :: OSI Approved :: MIT License",
+  "License :: OSI Approved :: Apache Software License",
   "Operating System :: OS Independent",
   "Programming Language :: Python :: 3",
   "Programming Language :: Python :: 3.12",
@@ -35,26 +34,38 @@ dependencies = [
 authors = [{ name = "eXonware Backend Team", email = "connect@exonware.com" }]
 
 [project.license]
-text = "MIT"
+text = "Apache-2.0"
 
 [project.optional-dependencies]
-dev = [
-  "black>=23.0.0",
-  "exonware-xwlazy",
-  "isort>=5.12.0",
-  "mypy>=1.0.0",
-  "pytest-asyncio>=0.21.0",
-  "pytest-cov>=4.0.0",
-  "pytest>=7.0.0",
-]
-lazy = [
-  "exonware-xwlazy",
-  "exonware-xwsystem[lazy]",
-]
-storage = [
+# First-party XW libs composed by this package (excludes exonware-xwsystem; see lazy/full).
+xw = [
+  "exonware-xwaction",
+  "exonware-xwauth",
+  "exonware-xwdata",
+  "exonware-xwentity",
+  "exonware-xwschema",
   "exonware-xwstorage",
 ]
+lazy = [
+  "exonware-xwapi[xw]",
+  "exonware-xwlazy",
+  "exonware-xwsystem[lazy]",
+  "exonware-xwaction[xw]",
+  "exonware-xwauth[xw]",
+  "exonware-xwdata[xw]",
+  "exonware-xwentity[xw]",
+  "exonware-xwschema[xw]",
+  "exonware-xwstorage[xw]",
+]
 full = [
+  "exonware-xwapi[xw]",
+  "exonware-xwsystem[full]",
+  "exonware-xwaction[xw]",
+  "exonware-xwdata[xw]",
+  "exonware-xwentity[xw]",
+  "exonware-xwschema[xw]",
+  "exonware-xwauth[xw]",
+  "exonware-xwstorage[xw]",
   "a2wsgi",
   "aiodns",
   "aiohttp",
@@ -98,6 +109,15 @@ full = [
   "uarray",
   "xmltodict",
   "zstandard",
+]
+dev = [
+  "exonware-xwapi[full]",
+  "black>=23.0.0",
+  "isort>=5.12.0",
+  "mypy>=1.0.0",
+  "pytest-asyncio>=0.21.0",
+  "pytest-cov>=4.0.0",
+  "pytest>=7.0.0",
 ]
 
 [project.urls]

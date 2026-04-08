@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-API token generation, monitoring, and recharge management.
+API token lifecycle for clients calling published actions (issue, revoke, usage, recharge).
 """
 
 from __future__ import annotations
@@ -8,7 +8,7 @@ from __future__ import annotations
 import asyncio
 from datetime import datetime, timezone
 from threading import RLock
-from typing import Any, Optional
+from typing import Any
 
 from exonware.xwapi.contracts import IAuthProvider, IStorageProvider, IPaymentProvider
 
@@ -54,8 +54,8 @@ class APITokenManager:
         subject_id: str,
         name: str,
         scopes: list[str],
-        expires_in_seconds: Optional[int] = None,
-        metadata: Optional[dict[str, Any]] = None,
+        expires_in_seconds: int | None = None,
+        metadata: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         issued = await self._auth_provider.issue_api_token(
             subject_id=subject_id,
@@ -94,7 +94,7 @@ class APITokenManager:
             "record": record,
         }
 
-    async def list_tokens(self, *, subject_id: Optional[str] = None) -> list[dict[str, Any]]:
+    async def list_tokens(self, *, subject_id: str | None = None) -> list[dict[str, Any]]:
         if subject_id:
             try:
                 token_ids = await self._storage_provider.read(self._subject_index_key(subject_id))
@@ -134,7 +134,7 @@ class APITokenManager:
         token_id: str,
         amount: float,
         operation: str,
-        metadata: Optional[dict[str, Any]] = None,
+        metadata: dict[str, Any] | None = None,
         idempotency_key: str | None = None,
     ) -> dict[str, Any]:
         token = await self._storage_provider.read(self._token_key(token_id))
@@ -232,7 +232,7 @@ class APITokenManager:
         subject_id: str,
         amount: float,
         currency: str = "USD",
-        metadata: Optional[dict[str, Any]] = None,
+        metadata: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         return await self._payment_provider.create_recharge(
             subject_id=subject_id,

@@ -8,58 +8,39 @@ Version: 0.0.1.0
 """
 
 from __future__ import annotations
-import sys
-from pathlib import Path
 
-
-def _add_monorepo_paths() -> None:
-    """Add sibling packages to path for pytest subprocess (run_pytest does not inherit parent sys.path)."""
-    root = Path(__file__).resolve().parent.parent
-    monorepo = root.parent
-    for pkg in (
-        "xwaction",
-        "xwapi",
-        "xwauth",
-        "xwdata",
-        "xwentity",
-        "xwjson",
-        "xwnode",
-        "xwquery",
-        "xwschema",
-        "xwstorage",
-        "xwsyntax",
-        "xwsystem",
-    ):
-        src = monorepo / pkg / "src"
-        if src.is_dir() and str(src) not in sys.path:
-            sys.path.insert(0, str(src))
-_add_monorepo_paths()
 import pytest
 from fastapi import FastAPI
 from exonware.xwapi.config import XWAPIConfig
-@pytest.fixture
 
+
+@pytest.fixture
 def sample_api_config():
     """Sample API configuration for testing."""
     return XWAPIConfig(
         title="Test API",
         version="1.0.0",
-        description="Test API for xwapi testing"
+        description="Test API for xwapi testing",
     )
-@pytest.fixture
 
+
+@pytest.fixture
 def sample_app(sample_api_config):
     """Create a sample FastAPI app for testing."""
     from exonware.xwapi.common.app import create_app
-    return create_app(config=sample_api_config)
-@pytest.fixture
 
+    return create_app(config=sample_api_config)
+
+
+@pytest.fixture
 def test_client(sample_app):
     """Create a test client for FastAPI app."""
     from fastapi.testclient import TestClient
-    return TestClient(sample_app)
-@pytest.fixture
 
+    return TestClient(sample_app)
+
+
+@pytest.fixture
 def sample_openapi_schema():
     """Sample OpenAPI schema for testing."""
     return {
@@ -67,7 +48,7 @@ def sample_openapi_schema():
         "info": {
             "title": "Test API",
             "version": "1.0.0",
-            "description": "Test API for xwapi testing"
+            "description": "Test API for xwapi testing",
         },
-        "paths": {}
+        "paths": {},
     }

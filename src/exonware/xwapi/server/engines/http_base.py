@@ -5,10 +5,10 @@ Base class for HTTP-based API server engines (REST, GraphQL, RPC over HTTP).
 Company: eXonware.com
 Author: eXonware Backend Team
 Email: connect@exonware.com
-Version: 0.9.0.3
+Version: 0.9.0.4
 """
 
-from typing import Any, Optional
+from typing import Any
 from datetime import datetime
 from .base import AApiServerEngineBase
 from .contracts import ProtocolType
@@ -22,7 +22,7 @@ class AHttpServerEngineBase(AApiServerEngineBase):
     Provides common functionality for HTTP engines (FastAPI, Flask, Django REST, etc.).
     """
 
-    def __init__(self, name: str, protocol_type: Optional[ProtocolType] = None):
+    def __init__(self, name: str, protocol_type: ProtocolType | None = None):
         """
         Initialize HTTP engine base.
         Args:

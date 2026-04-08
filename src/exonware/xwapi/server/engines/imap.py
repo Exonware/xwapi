@@ -5,10 +5,12 @@ IMAP protocol server (RFC 9051) for syncing emails.
 Company: eXonware.com
 Author: eXonware Backend Team
 Email: connect@exonware.com
-Version: 0.9.0.3
+Version: 0.9.0.4
 """
 
-from typing import Any, Optional, Callable, Dict
+from typing import Any
+
+from collections.abc import Callable
 import asyncio
 from email.message import EmailMessage
 from .base import AApiServerEngineBase
@@ -26,7 +28,7 @@ class IMAPServerEngine(AApiServerEngineBase):
     Supports IMAPS (SSL) and STARTTLS.
     """
 
-    def __init__(self, email_store: Optional[IEmailStore] = None):
+    def __init__(self, email_store: IEmailStore | None = None):
         """
         Initialize IMAP server engine.
         Args:
@@ -34,12 +36,12 @@ class IMAPServerEngine(AApiServerEngineBase):
         """
         super().__init__("imap")
         self._protocol_type = ProtocolType.IMAP
-        self._app: Optional[Any] = None
-        self._server: Optional[Any] = None
+        self._app: Any | None = None
+        self._server: Any | None = None
         self._email_store = email_store or InMemoryEmailStore()
-        self._command_handlers: Dict[str, Callable] = {}
-        self._host: Optional[str] = None
-        self._port: Optional[int] = None
+        self._command_handlers: dict[str, Callable] = {}
+        self._host: str | None = None
+        self._port: int | None = None
     @property
 
     def protocol_type(self) -> ProtocolType:

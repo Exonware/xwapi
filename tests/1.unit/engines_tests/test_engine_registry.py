@@ -72,3 +72,32 @@ def test_global_engine_registry_has_fastapi():
     # FastAPI engine should be auto-registered
     assert engine is not None
     assert engine.name == "fastapi"
+
+
+_OPTIONAL_HTTP_ENGINES = (
+    "starlette",
+    "quart",
+    "sanic",
+    "aiohttp",
+    "blacksheep",
+    "litestar",
+    "django",
+    "mangum",
+)
+
+
+@pytest.mark.xwapi_unit
+@pytest.mark.parametrize("engine_name", _OPTIONAL_HTTP_ENGINES)
+def test_optional_http_engine_registered_when_dependency_installed(engine_name: str) -> None:
+    """
+    Optional engines register only when their framework imports cleanly.
+    If the extra is installed, the global registry must expose the engine.
+    """
+    try:
+        __import__(engine_name)
+    except ImportError:
+        pytest.skip(f"{engine_name} not installed")
+    api_server_engine_registry.get_engine("fastapi")  # trigger lazy _auto_register_engines
+    eng = api_server_engine_registry.get_engine(engine_name)
+    assert eng is not None
+    assert eng.name == engine_name

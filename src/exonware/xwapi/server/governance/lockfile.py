@@ -6,7 +6,7 @@ across processes.
 Company: eXonware.com
 Author: eXonware Backend Team
 Email: connect@exonware.com
-Version: 0.9.0.3
+Version: 0.9.0.4
 """
 
 import os
@@ -14,7 +14,6 @@ import sys
 import time
 import atexit
 from pathlib import Path
-from typing import Optional
 import platform
 from exonware.xwsystem import get_logger
 logger = get_logger(__name__)
@@ -27,7 +26,7 @@ class LockfileManager:
     concurrent instances from starting.
     """
 
-    def __init__(self, server_id: str, runtime_dir: Optional[str] = None):
+    def __init__(self, server_id: str, runtime_dir: str | None = None):
         """
         Initialize lockfile manager.
         Args:
@@ -39,7 +38,7 @@ class LockfileManager:
         self.runtime_dir.mkdir(parents=True, exist_ok=True)
         # Lockfile path: {runtime_dir}/{server_id}.pid
         self.lockfile_path = self.runtime_dir / f"{server_id}.pid"
-        self._pid: Optional[int] = None
+        self._pid: int | None = None
         # Register cleanup on exit
         atexit.register(self.cleanup)
 
@@ -184,7 +183,7 @@ class LockfileManager:
             return False
 
 
-def create_lockfile_manager(server_id: str, runtime_dir: Optional[str] = None) -> LockfileManager:
+def create_lockfile_manager(server_id: str, runtime_dir: str | None = None) -> LockfileManager:
     """
     Create a lockfile manager instance.
     Args:

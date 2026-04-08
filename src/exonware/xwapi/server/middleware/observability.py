@@ -7,10 +7,10 @@ Tracks request count, latency, error rate, and tenant usage.
 Company: eXonware.com
 Author: eXonware Backend Team
 Email: connect@exonware.com
-Version: 0.9.0.3
+Version: 0.9.0.4
 """
 
-from typing import Callable
+from collections.abc import Callable
 from time import time
 from starlette.requests import Request
 from starlette.responses import Response

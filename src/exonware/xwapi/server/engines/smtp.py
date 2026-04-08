@@ -5,10 +5,12 @@ SMTP protocol server (RFC 5321) for receiving emails.
 Company: eXonware.com
 Author: eXonware Backend Team
 Email: connect@exonware.com
-Version: 0.9.0.3
+Version: 0.9.0.4
 """
 
-from typing import Any, Optional, Callable
+from typing import Any
+
+from collections.abc import Callable
 import asyncio
 from email.message import EmailMessage
 from email import message_from_bytes
@@ -27,7 +29,7 @@ class SMTPServerEngine(AApiServerEngineBase):
     Supports SMTPS (SSL) and STARTTLS.
     """
 
-    def __init__(self, email_store: Optional[IEmailStore] = None):
+    def __init__(self, email_store: IEmailStore | None = None):
         """
         Initialize SMTP server engine.
         Args:
@@ -35,12 +37,12 @@ class SMTPServerEngine(AApiServerEngineBase):
         """
         super().__init__("smtp")
         self._protocol_type = ProtocolType.SMTP
-        self._app: Optional[Any] = None
-        self._server: Optional[Any] = None
+        self._app: Any | None = None
+        self._server: Any | None = None
         self._email_store = email_store or InMemoryEmailStore()
-        self._message_handler: Optional[Callable] = None
-        self._host: Optional[str] = None
-        self._port: Optional[int] = None
+        self._message_handler: Callable | None = None
+        self._host: str | None = None
+        self._port: int | None = None
     @property
 
     def protocol_type(self) -> ProtocolType:

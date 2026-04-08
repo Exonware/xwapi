@@ -1,11 +1,14 @@
 #exonware/xwapi/action.py
 """
-xwapi action helpers: register_action_endpoint, create_action_context_dependency.
-Thin wrapper over xwaction FastAPIActionEngine. GUIDE_TEST root-cause fix.
+Helpers to wire *exposable actions* (XWAction) onto HTTP apps.
+
+``register_action_endpoint`` uses the FastAPI action engine by default; other transports
+(bots, console, alternate engines) use the same xwaction registries with different adapters.
+
 Company: eXonware.com
 Author: eXonware Backend Team
 Email: connect@exonware.com
-Version: 0.9.0.3
+Version: 0.9.0.4
 """
 
 from __future__ import annotations

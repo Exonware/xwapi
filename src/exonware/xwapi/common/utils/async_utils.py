@@ -6,12 +6,14 @@ running event loops from sync code paths.
 Company: eXonware.com
 Author: eXonware Backend Team
 Email: connect@exonware.com
-Version: 0.9.0.3
+Version: 0.9.0.4
 """
 
 import asyncio
 import threading
-from typing import Any, Coroutine, Optional
+from typing import Any, Optional
+
+from collections.abc import Coroutine
 from concurrent.futures import ThreadPoolExecutor
 from exonware.xwsystem import get_logger
 logger = get_logger(__name__)
@@ -30,7 +32,7 @@ def is_event_loop_running() -> bool:
         return False
 
 
-def run_safe_coroutine(coro: Coroutine, timeout: Optional[float] = None) -> Any:
+def run_safe_coroutine(coro: Coroutine, timeout: float | None = None) -> Any:
     """
     Safely execute a coroutine without blocking running event loops.
     This function handles the case where an event loop is already running
@@ -72,7 +74,7 @@ def run_safe_coroutine(coro: Coroutine, timeout: Optional[float] = None) -> Any:
             raise
 
 
-def run_async_in_thread(coro: Coroutine, timeout: Optional[float] = None) -> Any:
+def run_async_in_thread(coro: Coroutine, timeout: float | None = None) -> Any:
     """
     Execute a coroutine in a separate thread with its own event loop.
     This is useful when you need to run async code from sync code

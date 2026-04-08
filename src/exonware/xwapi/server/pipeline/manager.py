@@ -7,7 +7,9 @@ from __future__ import annotations
 
 from datetime import datetime
 from threading import RLock
-from typing import Any, Callable, Optional
+from typing import Any
+
+from collections.abc import Callable
 
 from exonware.xwapi.server.pipeline.outbox import AOutboxStore, InMemoryOutboxStore
 from exonware.xwapi.server.pipeline.worker import BackgroundWorker
@@ -18,7 +20,7 @@ JobHandler = Callable[[dict[str, Any]], Any]
 class ActionPipelineManager:
     """Coordinates durable outbox and singleton background worker."""
 
-    def __init__(self, owner_id: str, *, outbox_store: Optional[AOutboxStore] = None):
+    def __init__(self, owner_id: str, *, outbox_store: AOutboxStore | None = None):
         self._owner_id = owner_id
         self._store = outbox_store or InMemoryOutboxStore()
         self._worker = BackgroundWorker(owner_id=owner_id, store=self._store)
@@ -32,7 +34,7 @@ class ActionPipelineManager:
         job_type: str,
         payload: dict[str, Any],
         *,
-        run_after: Optional[datetime] = None,
+        run_after: datetime | None = None,
         max_attempts: int = 5,
     ) -> str:
         return self._store.enqueue(

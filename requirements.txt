@@ -1,4 +1,4 @@
-# Source size (src/*): ~475.6 KB
+# Source size (src/*): ~535.6 KB
 pip                     # Package installer (CI and lazy install)
 exonware-xwsystem
 exonware-xwentity
@@ -49,3 +49,23 @@ regex
 atomicwrites
 interegular
 python-multipart
+flask
+quart
+sanic
+ujson
+trustme
+aioquic
+blacksheep
+litestar
+advanced_alchemy
+obstore
+uuid-utils
+fastnanoid
+cattrs
+sqlmodel
+django
+mangum
+picologging
+pydantic-extra-types
+pywatchman
+email-validator

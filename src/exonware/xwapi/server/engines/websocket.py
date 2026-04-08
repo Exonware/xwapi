@@ -5,10 +5,10 @@ WebSocket-based API server engine using FastAPI WebSocket support.
 Company: eXonware.com
 Author: eXonware Backend Team
 Email: connect@exonware.com
-Version: 0.9.0.3
+Version: 0.9.0.4
 """
 
-from typing import Any, Optional
+from typing import Any
 from .http_base import AHttpServerEngineBase
 from .contracts import ProtocolType
 from exonware.xwapi.config import XWAPIConfig
@@ -26,7 +26,7 @@ class WebSocketServerEngine(AHttpServerEngineBase):
     def __init__(self):
         """Initialize WebSocket server engine."""
         super().__init__("websocket", protocol_type=ProtocolType.WEBSOCKET)
-        self._app: Optional[Any] = None
+        self._app: Any | None = None
         self._websocket_endpoints: dict[str, Any] = {}  # Track WebSocket endpoints
     @property
 

@@ -5,13 +5,17 @@ Creates FastAPI router with server management endpoints.
 Company: eXonware.com
 Author: eXonware Backend Team
 Email: connect@exonware.com
-Version: 0.9.0.3
+Version: 0.9.0.4
 """
 
-from typing import Any, Optional
+from typing import Any
 from datetime import datetime
 from exonware.xwapi.server.base import AApiServer
-from exonware.xwapi.errors import ServerLifecycleError
+from exonware.xwapi.errors import (
+    ServerLifecycleError,
+    create_error_response,
+    get_http_status_code,
+)
 from exonware.xwsystem import get_logger
 logger = get_logger(__name__)
 
@@ -98,11 +102,11 @@ def _create_fastapi_admin_router(server: AApiServer, prefix: str, tag: str, APIR
         status: str
         is_running: bool
         services_running: bool = False
-        start_time: Optional[str] = None
-        uptime_seconds: Optional[float] = None
-        engine: Optional[str] = None
-        host: Optional[str] = None
-        port: Optional[int] = None
+        start_time: str | None = None
+        uptime_seconds: float | None = None
+        engine: str | None = None
+        host: str | None = None
+        port: int | None = None
         actions_count: int = 0
     class HealthResponse(BaseModel, extra="allow"):
         """Health check response model."""
@@ -190,17 +194,17 @@ def _create_fastapi_admin_router(server: AApiServer, prefix: str, tag: str, APIR
         )
     class PauseResumeRequest(BaseModel):
         """Pause/resume request model."""
-        endpoint: Optional[str] = None
-        service: Optional[str] = None
-        method: Optional[str] = "GET"
+        endpoint: str | None = None
+        service: str | None = None
+        method: str | None = "GET"
     class PauseResumeResponse(BaseModel, extra="allow"):
         """Pause/resume response model."""
         status: str
         message: str
-        endpoint: Optional[str] = None
-        service: Optional[str] = None
-        method: Optional[str] = None
-        pause: Optional[dict[str, Any]] = None
+        endpoint: str | None = None
+        service: str | None = None
+        method: str | None = None
+        pause: dict[str, Any] | None = None
     @router.post("/pause", response_model=PauseResumeResponse, summary="Pause endpoint or service")
     async def pause_endpoint(request: PauseResumeRequest):
         """Pause a specific endpoint or service."""
@@ -252,9 +256,17 @@ def _create_fastapi_admin_router(server: AApiServer, prefix: str, tag: str, APIR
 
 def _create_flask_admin_router(server: AApiServer, prefix: str, tag: str, Blueprint) -> Any:
     """Create Flask Blueprint with admin endpoints."""
-    from flask import request, jsonify
+    from flask import request, jsonify, g
     from datetime import datetime
+    from uuid import uuid4
     blueprint = Blueprint('admin', __name__, url_prefix=prefix)
+
+    def _server_lifecycle_error_response(message: str, error: Exception):
+        trace_id = getattr(g, "trace_id", None) or str(uuid4())
+        lifecycle_error = ServerLifecycleError(message=message, details={"error": str(error)})
+        body = create_error_response(lifecycle_error, trace_id=trace_id)
+        status_code = get_http_status_code(lifecycle_error)
+        return jsonify(body), status_code
     @blueprint.route('/start', methods=['POST'])
     def start_services():
         """Start domain services."""
@@ -291,7 +303,7 @@ def _create_flask_admin_router(server: AApiServer, prefix: str, tag: str, Bluepr
             })
         except Exception as e:
             logger.error(f"Error starting services: {e}")
-            return jsonify({"error": str(e)}), 500
+            return _server_lifecycle_error_response("Failed to start services", e)
     @blueprint.route('/restart', methods=['POST'])
     def restart_server():
         """Restart the server (HTTP and services)."""
@@ -315,7 +327,7 @@ def _create_flask_admin_router(server: AApiServer, prefix: str, tag: str, Bluepr
             })
         except Exception as e:
             logger.error(f"Error restarting server: {e}")
-            return jsonify({"error": str(e)}), 500
+            return _server_lifecycle_error_response("Failed to restart server", e)
     @blueprint.route('/stop', methods=['POST'])
     def stop_server():
         """Stop the server (HTTP and services)."""
@@ -348,7 +360,7 @@ def _create_flask_admin_router(server: AApiServer, prefix: str, tag: str, Bluepr
             })
         except Exception as e:
             logger.error(f"Error stopping server: {e}")
-            return jsonify({"error": str(e)}), 500
+            return _server_lifecycle_error_response("Failed to stop server", e)
     @blueprint.route('/status', methods=['GET'])
     def get_status():
         """Get current server status."""

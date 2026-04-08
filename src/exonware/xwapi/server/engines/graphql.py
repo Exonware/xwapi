@@ -5,10 +5,12 @@ GraphQL-based API server engine using Strawberry.
 Company: eXonware.com
 Author: eXonware Backend Team
 Email: connect@exonware.com
-Version: 0.9.0.3
+Version: 0.9.0.4
 """
 
-from typing import Any, Optional, Type, Callable
+from typing import Any
+
+from collections.abc import Callable
 import inspect
 from .http_base import AHttpServerEngineBase
 from .contracts import ProtocolType
@@ -27,8 +29,8 @@ class GraphQLServerEngine(AHttpServerEngineBase):
     def __init__(self):
         """Initialize GraphQL server engine."""
         super().__init__("graphql", protocol_type=ProtocolType.HTTP_GRAPHQL)
-        self._app: Optional[Any] = None
-        self._schema: Optional[Any] = None
+        self._app: Any | None = None
+        self._schema: Any | None = None
         self._queries: dict[str, Any] = {}
         self._mutations: dict[str, Any] = {}
         self._type_cache: dict[str, Any] = {}
@@ -152,7 +154,7 @@ class GraphQLServerEngine(AHttpServerEngineBase):
         logger.debug(f"Registered GraphQL {'mutation' if is_mutation else 'query'}: {field_name}")
         return True
 
-    def _convert_schema_to_strawberry(self, schema: Any, name: str) -> Type:
+    def _convert_schema_to_strawberry(self, schema: Any, name: str) -> type:
         """
         Convert XWSchema (or dict) to Strawberry type.
         """
@@ -192,7 +194,7 @@ class GraphQLServerEngine(AHttpServerEngineBase):
                 # Handle required
                 required = prop_name in schema_dict.get('required', [])
                 if not required:
-                    prop_type = Optional[prop_type]
+                    prop_type = prop_type | None
                 fields[prop_name] = prop_type
             # Use strawberry.tools.create_type (if available) or dynamic class creation
             # Since create_type is simpler:
@@ -201,7 +203,7 @@ class GraphQLServerEngine(AHttpServerEngineBase):
             return new_type
         return str # Default fallback
 
-    def _create_composite_type(self, types: dict[str, Any], name: str) -> Type:
+    def _create_composite_type(self, types: dict[str, Any], name: str) -> type:
         """Create a Strawberry type from multiple output schemas."""
         import strawberry
         if name in self._type_cache:

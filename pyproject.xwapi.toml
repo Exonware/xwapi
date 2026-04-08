@@ -1,4 +1,4 @@
-# Source size (src/*): ~475.6 KB
+# Source size (src/*): ~535.6 KB
 [build-system]
 requires = [
     "hatchling",
@@ -16,17 +16,21 @@ requires-python = ">=3.12"
 keywords = [
     "api",
     "fastapi",
+    "flask",
     "openapi",
     "rest",
     "graphql",
     "oauth2",
     "exonware",
+    "actions",
+    "agent",
+    "client-server",
 ]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
     "Intended Audience :: Information Technology",
-    "License :: OSI Approved :: MIT License",
+    "License :: OSI Approved :: Apache Software License",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.12",
@@ -41,20 +45,21 @@ authors = [
 ]
 
 [project.license]
-text = "MIT"
+text = "Apache-2.0"
 
 [project.optional-dependencies]
-dev = [
-    "exonware-xwapi[dev]",
+# First-party XW libs composed by this package (excludes exonware-xwsystem; see lazy/full).
+xw = [
+    "exonware-xwapi[xw]",
 ]
 lazy = [
     "exonware-xwapi[lazy]",
 ]
-storage = [
-    "exonware-xwapi[storage]",
-]
 full = [
     "exonware-xwapi[full]",
+]
+dev = [
+    "exonware-xwapi[dev]",
 ]
 
 [project.urls]

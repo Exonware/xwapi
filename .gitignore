@@ -20,11 +20,11 @@ wheels/
 .installed.cfg
 *.egg
 
-# Virtual environments
+# Virtual environments (untracked only; if committed: git rm -r --cached .venv venv)
 venv/
-ENV/
+.venv/
 env/
-.venv
+ENV/
 
 # IDE
 .vscode/

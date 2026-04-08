@@ -1,10 +1,14 @@
 #exonware/xwapi/src/exonware/xwapi/base.py
 """
-Abstract base classes for xwapi library.
+Abstract bases for API servers, agents, generators, and service providers.
+
+Spans both *publishing* (servers, OpenAPI generators) and *consuming* (agents) sides of
+exposable actions.
+
 Company: eXonware.com
 Author: eXonware Backend Team
 Email: connect@exonware.com
-Version: 0.9.0.3
+Version: 0.9.0.4
 """
 
 from typing import Any, Optional
@@ -41,7 +45,7 @@ class AAPIEndpoint(ABC, IAPIEndpoint):
         path: str,
         method: HTTPMethod,
         entity_type: str,
-        action_name: Optional[str] = None,
+        action_name: str | None = None,
     ):
         self.endpoint_id = endpoint_id
         self.path = path
@@ -63,7 +67,7 @@ class AAPIEndpoint(ABC, IAPIEndpoint):
 
 
 class AAPIGenerator(ABC, IAPIGenerator):
-    """Abstract base class for API generator implementing IAPIGenerator interface."""
+    """Abstract base for turning actions/entities into an OpenAPI-backed app (publisher side)."""
     @abstractmethod
 
     async def generate_openapi(self) -> dict[str, Any]:
@@ -84,7 +88,7 @@ class AOAuth2Provider(ABC, IOAuth2Provider):
         provider_name: str,
         authorization_url: str,
         token_url: str,
-        userinfo_url: Optional[str] = None,
+        userinfo_url: str | None = None,
     ):
         self.provider_name = provider_name
         self.authorization_url = authorization_url
@@ -99,7 +103,7 @@ class AOAuth2Provider(ABC, IOAuth2Provider):
         """Get token URL."""
         return self.token_url
 
-    def get_userinfo_url(self) -> Optional[str]:
+    def get_userinfo_url(self) -> str | None:
         """Get userinfo URL."""
         return self.userinfo_url
 
@@ -112,7 +116,7 @@ class AApiServer(ABC, IApiServer):
         from exonware.xwsystem import get_logger
         self.logger = get_logger(self.__class__.__name__)
         self._is_running = False
-        self._start_time: Optional[datetime] = None
+        self._start_time: datetime | None = None
         self._services_running = False
         # Track flushable handlers for shutdown
         self._flushable_handlers: list[Any] = []
@@ -307,7 +311,7 @@ class AApiServer(ABC, IApiServer):
 class AApiAgent(ABC, IApiAgent):
     """Abstract base class for API agent implementing IApiAgent interface."""
 
-    def __init__(self, name: Optional[str] = None):
+    def __init__(self, name: str | None = None):
         """
         Initialize API agent.
         Args:

@@ -11,7 +11,6 @@ from __future__ import annotations
 import pytest
 from unittest.mock import MagicMock, patch, mock_open
 import requests
-from typing import Optional
 from exonware.xwapi import XWApiAgent
 from exonware.xwaction import XWAction, ActionProfile
 # --- Mocks & Fixtures ---

@@ -1,11 +1,13 @@
 #exonware/xwapi/query.py
 """
-xwapi query helpers: QueryParams, execute_xwquery.
-Minimal compatibility layer. Use XWQuery directly for full functionality. GUIDE_TEST root-cause fix.
+Query helpers for list/filter-style exposable actions (QueryParams, execute_xwquery).
+
+Thin compatibility layer; prefer XWQuery for full behavior.
+
 Company: eXonware.com
 Author: eXonware Backend Team
 Email: connect@exonware.com
-Version: 0.9.0.3
+Version: 0.9.0.4
 """
 
 from __future__ import annotations
@@ -16,12 +18,12 @@ from typing import Any, Optional
 
 class QueryParams:
     """Query parameters for list/filter operations."""
-    filter_expr: Optional[Any] = None
-    sort: Optional[Any] = None
-    limit: Optional[int] = None
-    offset: Optional[int] = None
-    cursor: Optional[str] = None
-    search: Optional[str] = None
+    filter_expr: Any | None = None
+    sort: Any | None = None
+    limit: int | None = None
+    offset: int | None = None
+    cursor: str | None = None
+    search: str | None = None
 
     def __eq__(self, other: object) -> bool:
         """Identity equality (different instances not equal per test_query_params_equality)."""
@@ -29,7 +31,7 @@ class QueryParams:
 
 
 def execute_xwquery(
-    query_or_params: "QueryParams | str | None",
+    query_or_params: QueryParams | str | None,
     data: Any = None,
     **kwargs: Any,
 ) -> Any:

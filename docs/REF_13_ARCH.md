@@ -1,15 +1,17 @@
 # Architecture Reference — xwapi
 
 **Library:** exonware-xwapi  
-**Last Updated:** 31-Mar-2026
+**Last Updated:** 05-Apr-2026
 
 ## Overview
 
-`xwapi` is the API orchestration layer in eXonware. It provides:
+`xwapi` orchestrates **exposable actions** and entities for eXonware: **build once, publish anywhere** (HTTP/OpenAPI today; bots/consoles follow the same action contracts). It is intentionally **bidirectional** — servers **publish**, `XWApiAgent` and client engines **consume** remote APIs.
 
-- engine-agnostic app/server abstractions
+It provides:
+
+- engine-agnostic app/server abstractions (**FastAPI** default ASGI/OpenAPI; **Flask** WSGI engine in the registry)
 - route and action registration via `xwaction`
-- entity-driven endpoint generation (`xwentity`)
+- entity-driven HTTP surfaces (`xwentity`)
 - transport-neutral error model with framework adapters
 - middleware pipeline (trace/tenant/rate-limit/auth/observability/pause/admin/API-token)
 - operational admin endpoints
@@ -18,26 +20,29 @@
 
 ## Architectural layers
 
-1. **Facade/API layer**
+1. **Facade / publisher**
    - `XWAPI`
-   - OpenAPI generation and app creation
-2. **Server/runtime layer**
+   - OpenAPI generation and app creation (`engine=` selects FastAPI, Flask, …)
+2. **Client / consumer**
+   - `XWApiAgent`, client engine registry
+3. **Server/runtime layer**
    - `XWApiServer`
    - action registration, operational lifecycle, status/health
-3. **Middleware layer**
+4. **Middleware layer**
    - request guards, observability, auth, pause, API token metering
-4. **Pipeline layer**
+5. **Pipeline layer**
    - `AOutboxStore`, `InMemoryOutboxStore`
    - `BackgroundWorker` (singleton-per-process)
    - `ActionPipelineManager`
-5. **Token/billing layer**
+6. **Token/billing layer**
    - `APITokenManager`
    - provider contracts: `IAuthProvider`, `IStorageProvider`, `IPaymentProvider`
-6. **Provider adapters**
+7. **Provider adapters**
    - local/in-memory adapters and library-backed adapters (`xwauth`, `xwstorage`)
 
 ## Engine and protocol agnosticism
 
+- **HTTP:** `fastapi` is the default engine (OpenAPI, async ASGI); `flask` is registered for WSGI. Select at `create_app` / `XWApiServer` construction; actions and errors stay engine-agnostic where possible.
 - Core errors are represented as `XWAPIError` variants.
 - Mapping to HTTP responses is handled by adapters (`xwapi_error_to_http_parts`, Starlette response adapter).
 - Middleware and request/response handling avoid unnecessary engine-specific coupling where possible.

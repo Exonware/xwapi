@@ -1,11 +1,13 @@
 # Project Reference — xwapi
 
 **Library:** exonware-xwapi  
-**Last Updated:** 31-Mar-2026
+**Last Updated:** 05-Apr-2026
 
 ## Vision
 
-`xwapi` is the API control plane for eXonware services: expose actions/entities safely, keep engine coupling low, and provide production operational primitives (pipeline + token lifecycle + governance middleware).
+`xwapi` is the control plane for **exposable actions** and entities: **build once, publish anywhere** (HTTP/OpenAPI first; bots/consoles map to the same contracts). It hosts **both** sides — **servers** that publish APIs and **clients/agents** that consume them — with low engine coupling (FastAPI default, Flask alternate) and production primitives (pipeline, token lifecycle, governance middleware).
+
+See [REF_24_ALTERNATIVES.md](REF_24_ALTERNATIVES.md) for ecosystem comparison and engine notes.
 
 ## Major completed capabilities
 
@@ -45,5 +47,6 @@
 ## Traceability
 
 - Architecture: [REF_13_ARCH.md](REF_13_ARCH.md)
+- Alternatives / engines: [REF_24_ALTERNATIVES.md](REF_24_ALTERNATIVES.md)
 - API surface: [REF_15_API.md](REF_15_API.md)
 - Testing: [REF_51_TEST.md](REF_51_TEST.md)
