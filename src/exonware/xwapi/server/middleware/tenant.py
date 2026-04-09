@@ -7,7 +7,7 @@ Enforces tenant isolation at the middleware level.
 Company: eXonware.com
 Author: eXonware Backend Team
 Email: connect@exonware.com
-Version: 0.9.0.4
+Version: 0.9.0.5
 """
 
 from collections.abc import Callable

@@ -5,7 +5,7 @@ Base class for HTTP-based API server engines (REST, GraphQL, RPC over HTTP).
 Company: eXonware.com
 Author: eXonware Backend Team
 Email: connect@exonware.com
-Version: 0.9.0.4
+Version: 0.9.0.5
 """
 
 from typing import Any

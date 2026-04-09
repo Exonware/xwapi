@@ -10,7 +10,7 @@ Discovers ``XWAction`` methods, integrates OAuth and entity sessions, and is the
 Company: eXonware.com
 Author: eXonware Backend Team
 Email: connect@exonware.com
-Version: 0.9.0.4
+Version: 0.9.0.5
 """
 
 from typing import Any, Optional
@@ -49,7 +49,7 @@ class XWApiAgent(AApiAgent):
         >>> # agent.register_to_server(server)
         >>> # server.start(port=8000)
     """
-    DEFAULT_AUTH_DIR = "data/xwauth"
+    DEFAULT_AUTH_DIR = ".data/xwauth"
     DEFAULT_ENTITY_TYPE = "entity"
 
     def __init__(
@@ -178,12 +178,12 @@ class XWApiAgent(AApiAgent):
         This method loads auth configs from files but doesn't require xwauth.
         Configs are stored and can be used later when xwauth is available.
         Supports multiple platforms and multiple authorizations per platform.
-        Directory structure: data/xwauth/{platform}/{auth_name}/config.json
+        Directory structure: .data/xwauth/{platform}/{auth_name}/config.json
         Args:
             platform: Name of the platform (e.g., 'google', 'liveme')
             auth_name: Name of the authorization/account (e.g., 'service_account', 'ru_karizma')
             config_path: Path to JSON config file. If None, uses default path:
-                        data/xwauth/{platform}/{auth_name}/config.json
+                        .data/xwauth/{platform}/{auth_name}/config.json
         Returns:
             Dictionary containing the loaded config
         Example:
@@ -193,7 +193,7 @@ class XWApiAgent(AApiAgent):
         """
         # If config_path not provided, use default structure
         if config_path is None:
-            # Try to determine base directory (usually data/xwauth/)
+            # Try to determine base directory (usually .data/xwauth/)
             # This is a best-effort approach - subclasses can override
             config_path = f"{self.DEFAULT_AUTH_DIR}/{platform}/{auth_name}/config.json"
         config_file = Path(config_path)
@@ -232,9 +232,9 @@ class XWApiAgent(AApiAgent):
     def load_all_auth_configs(self, base_path: str = DEFAULT_AUTH_DIR) -> dict[str, dict[str, dict[str, Any]]]:
         """
         Load all authentication configurations from directory structure.
-        Scans data/xwauth/{platform}/{auth_name}/config.json structure and loads all configs.
+        Scans .data/xwauth/{platform}/{auth_name}/config.json structure and loads all configs.
         Args:
-            base_path: Base path to xwauth directory (default: "data/xwauth")
+            base_path: Base path to xwauth directory (default: ".data/xwauth")
         Returns:
             Dictionary of all loaded configs: {platform: {auth_name: config}}
         """
@@ -304,7 +304,7 @@ class XWApiAgent(AApiAgent):
             auth_name: Authentication name/account identifier
             tokens: Dictionary containing token data
             token_path: Optional custom path for token file. If None, uses default:
-                       data/xwauth/{platform}/{auth_name}/token.json
+                       .data/xwauth/{platform}/{auth_name}/token.json
         """
         if token_path is None:
             token_path = f"{self.DEFAULT_AUTH_DIR}/{platform}/{auth_name}/token.json"
@@ -322,7 +322,7 @@ class XWApiAgent(AApiAgent):
             platform: Platform name (e.g., 'liveme', 'google')
             auth_name: Authentication name/account identifier
             token_path: Optional custom path for token file. If None, uses default:
-                       data/xwauth/{platform}/{auth_name}/token.json
+                       .data/xwauth/{platform}/{auth_name}/token.json
         Returns:
             Dictionary containing token data, or None if file doesn't exist
         """
@@ -467,10 +467,10 @@ class XWApiAgent(AApiAgent):
         """
         Revive (reload) all authentication configurations.
         This method reloads all authentication configurations from either:
-        - Local file system: data/xwauth/{platform}/{auth_name}/config.json
+        - Local file system: .data/xwauth/{platform}/{auth_name}/config.json
         - xwstorage: If use_storage is True and xwstorage is available
         Args:
-            base_path: Optional base path for local auth configs (default: "data/xwauth")
+            base_path: Optional base path for local auth configs (default: ".data/xwauth")
             use_storage: If True, attempt to use xwstorage (requires xwstorage to be available)
         Returns:
             Dictionary containing revival status plus ``user_report`` (plain text for bots/CLI):

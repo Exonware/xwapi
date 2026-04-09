@@ -5,7 +5,7 @@ IMAP protocol server (RFC 9051) for syncing emails.
 Company: eXonware.com
 Author: eXonware Backend Team
 Email: connect@exonware.com
-Version: 0.9.0.4
+Version: 0.9.0.5
 """
 
 from typing import Any

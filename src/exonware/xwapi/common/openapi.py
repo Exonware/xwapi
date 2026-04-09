@@ -7,7 +7,7 @@ Engine-specific document generation still lives in HTTP engines (FastAPI, …).
 Company: eXonware.com
 Author: eXonware Backend Team
 Email: connect@exonware.com
-Version: 0.9.0.4
+Version: 0.9.0.5
 """
 
 from typing import Any, Optional
