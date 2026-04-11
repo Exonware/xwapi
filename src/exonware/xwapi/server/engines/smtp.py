@@ -5,7 +5,7 @@ SMTP protocol server (RFC 5321) for receiving emails.
 Company: eXonware.com
 Author: eXonware Backend Team
 Email: connect@exonware.com
-Version: 0.9.0.5
+Version: 0.9.0.6
 """
 
 from typing import Any

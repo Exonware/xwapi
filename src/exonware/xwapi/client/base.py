@@ -6,7 +6,7 @@ All new code should import from exonware.xwapi.base directly.
 Company: eXonware.com
 Author: eXonware Backend Team
 Email: connect@exonware.com
-Version: 0.9.0.5
+Version: 0.9.0.6
 """
 # Re-export AApiAgent from xwapi.base for backward compatibility
 

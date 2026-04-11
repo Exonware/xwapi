@@ -10,7 +10,7 @@ Discovers ``XWAction`` methods, integrates OAuth and entity sessions, and is the
 Company: eXonware.com
 Author: eXonware Backend Team
 Email: connect@exonware.com
-Version: 0.9.0.5
+Version: 0.9.0.6
 """
 
 from typing import Any, Optional
@@ -373,15 +373,49 @@ class XWApiAgent(AApiAgent):
                 out.append(prefix + line)
         return out
 
+    @staticmethod
+    def _revival_auth_dir_key(name: str) -> str:
+        """Normalize auth folder name for matching (case, hyphen vs underscore)."""
+        return (name or "").strip().lower().replace("-", "_")
+
     def _token_json_paths(self, platform: str, auth_name: str) -> list[Path]:
-        """Paths to try for token.json (cwd-relative default + optional agent dir_data)."""
-        paths: list[Path] = [
-            Path(self.DEFAULT_AUTH_DIR) / platform / auth_name / "token.json",
-        ]
+        """
+        Paths to try for token.json.
+        Uses agent ``dir_data``/xwauth first, then cwd-relative ``DEFAULT_AUTH_DIR``.
+        """
+        out: list[Path] = []
+        seen: set[str] = set()
+
+        def add(p: Path) -> None:
+            try:
+                key = str(p.resolve())
+            except OSError:
+                key = str(p)
+            if key not in seen:
+                seen.add(key)
+                out.append(p)
+
+        bases: list[Path] = []
         dd = getattr(self, "dir_data", None)
         if dd:
-            paths.append(Path(dd) / "xwauth" / platform / auth_name / "token.json")
-        return paths
+            bases.append(Path(str(dd)) / "xwauth")
+        bases.append(Path(self.DEFAULT_AUTH_DIR))
+
+        an = (auth_name or "").strip()
+        want_key = self._revival_auth_dir_key(an)
+
+        for base in bases:
+            if want_key:
+                add(base / platform / auth_name / "token.json")
+            plat_dir = base / platform
+            if want_key and plat_dir.is_dir():
+                try:
+                    for child in plat_dir.iterdir():
+                        if child.is_dir() and self._revival_auth_dir_key(child.name) == want_key:
+                            add(child / "token.json")
+                except OSError:
+                    pass
+        return out
 
     def _revival_lines_probe_token(self, platform: str, auth_name: str) -> list[str]:
         """Reconnect check using saved token files only (no live API)."""
@@ -391,6 +425,11 @@ class XWApiAgent(AApiAgent):
                     "Reconnect: OK — saved token file exists.",
                     f"Location: {p}",
                 ]
+        if str(platform).lower() == "google":
+            return [
+                "Reconnect: no token.json for this Google auth (normal for service-account: only config.json).",
+                "Re-authenticate: not required unless an OAuth user flow writes token.json.",
+            ]
         return [
             "Reconnect: no token file yet.",
             "Re-authenticate: sign in or refresh so token.json can be written.",
@@ -497,11 +536,17 @@ class XWApiAgent(AApiAgent):
                 logger.info("xwstorage integration not yet implemented, falling back to local path")
                 result["storage_used"] = False
             if base_path is None or (isinstance(base_path, str) and not base_path.strip()):
-                base_path = self.DEFAULT_AUTH_DIR
+                # Prefer agent data root (e.g. Karizma .data) over cwd-relative ".data/xwauth".
+                dd = getattr(self, "dir_data", None)
+                if dd:
+                    base_path = str(Path(str(dd)) / "xwauth")
+                else:
+                    base_path = self.DEFAULT_AUTH_DIR
             elif isinstance(base_path, str):
                 base_path = base_path.strip()
             else:
-                base_path = self.DEFAULT_AUTH_DIR
+                dd = getattr(self, "dir_data", None)
+                base_path = str(Path(str(dd)) / "xwauth") if dd else self.DEFAULT_AUTH_DIR
             reloaded_configs = self.load_all_auth_configs(base_path=base_path)
             result["reloaded_count"] = sum(len(auths) for auths in reloaded_configs.values())
             result["platforms"] = list(reloaded_configs.keys())
