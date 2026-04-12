@@ -4,7 +4,7 @@ Utility modules for xwapi.
 Company: eXonware.com
 Author: eXonware Backend Team
 Email: connect@exonware.com
-Version: 0.9.0.7
+Version: 0.9.0.8
 """
 
 from .async_utils import run_safe_coroutine, is_event_loop_running

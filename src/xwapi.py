@@ -5,7 +5,7 @@ Top-level convenience re-export of ``exonware.xwapi`` (servers + clients for exp
 Company: eXonware.com
 Author: eXonware Backend Team
 Email: connect@exonware.com
-Version: 0.9.0.7
+Version: 0.9.0.8
 """
 
 from exonware.xwapi import *  # noqa: F403, F401
