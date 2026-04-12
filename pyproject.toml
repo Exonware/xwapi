@@ -40,32 +40,32 @@ text = "Apache-2.0"
 # First-party XW libs composed by this package (excludes exonware-xwsystem==0.9.0.37; see lazy/full).
 xw = [
   "exonware-xwaction==0.9.0.12",
-  "exonware-xwauth==0.0.1.9",
+  "exonware-xwauth==0.0.1.10",
   "exonware-xwdata==0.9.0.17",
   "exonware-xwentity==0.6.0.11",
   "exonware-xwschema==0.4.0.12",
-  "exonware-xwstorage==0.0.1.7",
+  "exonware-xwstorage==0.0.1.8",
 ]
 lazy = [
-  "exonware-xwapi[xw]==0.9.0.8",
+  "exonware-xwapi[xw]==0.9.0.9",
   "exonware-xwlazy==1.0.1.81",
   "exonware-xwsystem[lazy]==0.9.0.39",
   "exonware-xwaction[xw]==0.9.0.12",
-  "exonware-xwauth[xw]==0.0.1.9",
+  "exonware-xwauth[xw]==0.0.1.10",
   "exonware-xwdata[xw]==0.9.0.17",
   "exonware-xwentity[xw]==0.6.0.11",
   "exonware-xwschema[xw]==0.4.0.12",
-  "exonware-xwstorage[xw]==0.0.1.7",
+  "exonware-xwstorage[xw]==0.0.1.8",
 ]
 full = [
-  "exonware-xwapi[xw]==0.9.0.8",
+  "exonware-xwapi[xw]==0.9.0.9",
   "exonware-xwsystem[full]==0.9.0.39",
   "exonware-xwaction[xw]==0.9.0.12",
   "exonware-xwdata[xw]==0.9.0.17",
   "exonware-xwentity[xw]==0.6.0.11",
   "exonware-xwschema[xw]==0.4.0.12",
-  "exonware-xwauth[xw]==0.0.1.9",
-  "exonware-xwstorage[xw]==0.0.1.7",
+  "exonware-xwauth[xw]==0.0.1.10",
+  "exonware-xwstorage[xw]==0.0.1.8",
   "a2wsgi",
   "aiodns",
   "aiohttp",
@@ -111,7 +111,7 @@ full = [
   "zstandard",
 ]
 dev = [
-  "exonware-xwapi[full]==0.9.0.8",
+  "exonware-xwapi[full]==0.9.0.9",
   "black>=23.0.0",
   "isort>=5.12.0",
   "mypy>=1.0.0",

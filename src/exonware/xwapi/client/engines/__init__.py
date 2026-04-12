@@ -7,13 +7,13 @@ Reliability/Performance, Observability/Operations, Contract/Evolution.
 Company: eXonware.com
 Author: eXonware Backend Team
 Email: connect@exonware.com
-Version: 0.9.0.8
+Version: 0.9.0.9
 """
 
 from typing import Any, Optional
 from .contracts import IApiAgentEngine, AgentType
 from .base import AApiAgentEngineBase
-from .native import NativeAgentEngine
+from .native import NativeAgentEngine, discover_xwaction_bound_methods
 from exonware.xwsystem import get_logger
 logger = get_logger(__name__)
 
@@ -94,4 +94,5 @@ __all__ = [
     "ApiAgentEngineRegistry",
     "api_agent_engine_registry",
     "NativeAgentEngine",
+    "discover_xwaction_bound_methods",
 ]

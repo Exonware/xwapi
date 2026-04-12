@@ -115,6 +115,6 @@ This is the practical edge: one place composes **publish** (server) and **consum
 ---
 
 Apache-2.0 - see [LICENSE](LICENSE). Homepage: https://exonware.com
-Version: 0.9.0.8 | Updated: 13-Apr-2026
+Version: 0.9.0.9 | Updated: 13-Apr-2026
 
 *Built with ❤️ by eXonware.com - Revolutionizing Python Development Since 2025*
