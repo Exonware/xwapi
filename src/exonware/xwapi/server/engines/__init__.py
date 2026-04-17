@@ -8,7 +8,7 @@ power; Flask supports WSGI. *Build once, publish anywhere* — actions stay stab
 Company: eXonware.com
 Author: eXonware Backend Team
 Email: connect@exonware.com
-Version: 0.9.0.9
+Version: 0.9.0.10
 """
 
 from __future__ import annotations

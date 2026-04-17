@@ -5,7 +5,7 @@ Native agent engine - the default XWApiAgent behavior.
 Company: eXonware.com
 Author: eXonware Backend Team
 Email: connect@exonware.com
-Version: 0.9.0.9
+Version: 0.9.0.10
 """
 
 from typing import Any
@@ -13,6 +13,7 @@ from inspect import getmembers, isfunction, ismethod
 from .base import AApiAgentEngineBase
 from .contracts import AgentType
 from exonware.xwsystem import get_logger
+from exonware.xwapi.client.runtime_gate import ensure_xwapi_runtime_allows_action
 logger = get_logger(__name__)
 
 
@@ -42,7 +43,9 @@ def discover_xwaction_bound_methods(agent_instance: Any) -> list[Any]:
                 actions.append(method)
                 discovered_names.add(name)
                 logger.debug("Discovered action: %s from class %s", name, cls.__name__)
-    logger.info(
+    # INFO here duplicates callers (e.g. XWApiAgent._discover_actions) and spams logs when
+    # discover_xwaction_bound_methods is used for read-only merges (command bot /help, menus).
+    logger.debug(
         "Discovered %s actions for agent %s",
         len(actions),
         getattr(agent_instance, "_name", "unknown"),
@@ -117,6 +120,8 @@ class NativeAgentEngine(AApiAgentEngineBase):
         Returns:
             Action result
         """
+        subject = getattr(action, "__self__", None) or agent_instance
+        ensure_xwapi_runtime_allows_action(subject, action)
         # Standard XWAction execution
         if hasattr(action, 'execute'):
             return action.execute(context, **kwargs)

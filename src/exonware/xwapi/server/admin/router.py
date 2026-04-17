@@ -5,7 +5,7 @@ Creates FastAPI router with server management endpoints.
 Company: eXonware.com
 Author: eXonware Backend Team
 Email: connect@exonware.com
-Version: 0.9.0.9
+Version: 0.9.0.10
 """
 
 from typing import Any

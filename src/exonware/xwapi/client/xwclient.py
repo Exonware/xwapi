@@ -10,11 +10,12 @@ Discovers ``XWAction`` methods, integrates OAuth and entity sessions, and is the
 Company: eXonware.com
 Author: eXonware Backend Team
 Email: connect@exonware.com
-Version: 0.9.0.9
+Version: 0.9.0.10
 """
 
 from typing import Any, Optional
 
+import functools
 from collections.abc import Callable
 from inspect import isfunction
 from pathlib import Path
@@ -27,13 +28,56 @@ from exonware.xwsystem import get_logger
 from exonware.xwaction import XWAction, ActionProfile
 # Import agent engines
 from exonware.xwapi.client.engines import api_agent_engine_registry, IApiAgentEngine
+from exonware.xwapi.client.runtime_gate import ensure_xwapi_runtime_allows_action
 logger = get_logger(__name__)
+
+
+def _install_xwapi_runtime_method_guards(target_cls: type) -> None:
+    """
+    Wrap ``@XWAction`` callables defined on ``target_cls`` so **direct** ``agent.action(...)`` calls
+    honor pause/stop (bots and CLIs call bound methods, not only NativeAgentEngine.execute_action).
+    """
+    for attr_name, attr in list(target_cls.__dict__.items()):
+        if attr_name.startswith("_"):
+            continue
+        if not callable(attr):
+            continue
+        if getattr(attr, "_xwapi_runtime_guard", False):
+            continue
+        if getattr(attr, "xwaction", None) is None:
+            continue
+        inner = attr
+
+        @functools.wraps(inner)
+        def outer(*a: Any, _inner: Any = inner, **kw: Any) -> Any:
+            self = a[0] if a else None
+            ensure_xwapi_runtime_allows_action(self, _inner)
+            return _inner(*a, **kw)
+
+        outer._xwapi_runtime_guard = True  # type: ignore[attr-defined]
+        for meta in (
+            "xwaction",
+            "execute",
+            "_is_action",
+            "roles",
+            "api_name",
+            "engines",
+            "to_native",
+            "in_types",
+            "_action_parameters",
+            "context_params",
+        ):
+            if hasattr(inner, meta):
+                setattr(outer, meta, getattr(inner, meta))
+        setattr(target_cls, attr_name, outer)
 
 
 class XWApiAgent(AApiAgent):
     """
     Agent base class: own ``XWAction`` methods and register them onto an ``ApiServer``, or use
     the same patterns to drive **client** flows against remote exposable actions.
+
+    Subclasses automatically get the same runtime guards on their own ``@XWAction`` methods.
 
     Usage:
         >>> from exonware.xwapi import XWApiAgent
@@ -51,6 +95,10 @@ class XWApiAgent(AApiAgent):
     """
     DEFAULT_AUTH_DIR = ".data/xwauth"
     DEFAULT_ENTITY_TYPE = "entity"
+
+    def __init_subclass__(cls, **kwargs: Any) -> None:
+        super().__init_subclass__(**kwargs)
+        _install_xwapi_runtime_method_guards(cls)
 
     def __init__(
         self, 
@@ -82,6 +130,12 @@ class XWApiAgent(AApiAgent):
         self._entity_session_manager = EntitySessionManager(self._entities)
         # Subsystems for /revive user_report: (step_id, title, runner(agent) -> lines)
         self._revival_steps: list[tuple[str, str, Callable[[Any], list[str]]]] = []
+        # Runtime gate: when False, non-lifecycle @XWAction calls are blocked (concrete enforcement).
+        self._runtime_active: bool = True
+        # When True (and _runtime_active True), business actions are blocked but lifecycle commands work.
+        self._runtime_paused: bool = False
+        # Optional probes for api_status / api_health: (probe_id, title, probe(agent) -> (ok, detail))
+        self._runtime_status_probes: list[tuple[str, str, Callable[[Any], tuple[bool, str]]]] = []
         # Get agent engine from registry
         if api_agent_engine_registry:
             self._agent_engine: IApiAgentEngine | None = api_agent_engine_registry.get_engine(agent_engine)
@@ -352,6 +406,19 @@ class XWApiAgent(AApiAgent):
         """
         self._revival_steps.append((step_id, title, runner))
 
+    def register_runtime_status_probe(
+        self,
+        probe_id: str,
+        title: str,
+        probe: Callable[[Any], tuple[bool, str]],
+    ) -> None:
+        """
+        Register a dynamic probe for :meth:`api_status` / :meth:`api_health`.
+        ``probe(self)`` should return ``(ok, detail)`` and avoid raising when possible.
+        """
+        pid = (probe_id or "").strip() or "custom"
+        self._runtime_status_probes.append((pid, (title or "").strip() or pid, probe))
+
     def list_revival_step_titles(self) -> list[tuple[str, str]]:
         """(step_id, title) for custom steps only (not the auto xwauth/token blocks)."""
         return [(sid, title) for sid, title, _ in self._revival_steps]
@@ -417,78 +484,63 @@ class XWApiAgent(AApiAgent):
                     pass
         return out
 
-    def _revival_lines_probe_token(self, platform: str, auth_name: str) -> list[str]:
-        """Reconnect check using saved token files only (no live API)."""
-        for p in self._token_json_paths(platform, auth_name):
-            if p.is_file():
-                return [
-                    "Reconnect: OK — saved token file exists.",
-                    f"Location: {p}",
-                ]
-        if str(platform).lower() == "google":
-            return [
-                "Reconnect: no token.json for this Google auth (normal for service-account: only config.json).",
-                "Re-authenticate: not required unless an OAuth user flow writes token.json.",
-            ]
-        return [
-            "Reconnect: no token file yet.",
-            "Re-authenticate: sign in or refresh so token.json can be written.",
-        ]
-
     def _compose_revival_user_report(self, reload_result: dict[str, Any]) -> str:
-        """
-        Human-readable revive summary: what was tried per subsystem (reload, each auth pair,
-        then registered runners e.g. Live.me HTTP sessions).
-        """
-        lines: list[str] = [
-            "Revive — what the bot checked",
-            "",
-            "For each item below we try in order:",
-            "  1) Reconnect — use configs/tokens already on disk or an existing live session.",
-            "  2) Re-authenticate — login or token refresh if reconnect is not enough.",
-            "  3) If something still fails, the error is shown under that item.",
-            "",
-        ]
-        n = 1
-        lines.append(f"[{n}] Configuration files (xwauth / config.json reload)")
-        n += 1
-        if reload_result.get("success") and (reload_result.get("reloaded_count") or 0) > 0:
-            lines.append(
-                f"   Result: OK — loaded {reload_result['reloaded_count']} config(s) across "
-                f"{len(reload_result.get('platforms') or [])} platform(s)."
-            )
-            for plat in sorted((reload_result.get("auths") or {}).keys()):
-                names = ", ".join(sorted(reload_result["auths"][plat]))
-                lines.append(f"   {plat}: {names}")
-        else:
-            lines.append("   Result: problem — nothing loaded or reload failed.")
-            for err in reload_result.get("errors") or []:
-                lines.append(f"   · {self._revival_truncate(str(err))}")
-
+        """Short emoji-style revive summary (one line per external surface)."""
         auths = reload_result.get("auths") or {}
+        if not isinstance(auths, dict):
+            auths = {}
+        token_pairs: list[tuple[str, str]] = []
         for plat in sorted(auths.keys()):
             for auth_name in sorted(auths[plat]):
-                lines.append("")
-                lines.append(f"[{n}] Saved tokens — platform «{plat}», account «{auth_name}»")
-                n += 1
-                lines.extend(self._revival_indent(self._revival_lines_probe_token(plat, auth_name)))
+                token_pairs.append((plat, auth_name))
+        steps = list(getattr(self, "_revival_steps", ()) or ())
+        n_total = 1 + len(token_pairs) + len(steps)
 
-        for step_id, title, runner in self._revival_steps:
-            lines.append("")
-            lines.append(f"[{n}] {title}")
-            n += 1
+        def _token_line(plat: str, auth_name: str) -> str:
+            if any(p.is_file() for p in self._token_json_paths(plat, auth_name)):
+                return f"✅ {plat}/{auth_name} — token on disk"
+            if str(plat).lower() == "google":
+                return f"⚪ {plat}/{auth_name} — no token.json (OK for service account)"
+            return f"❌ {plat}/{auth_name} — no token file yet"
+
+        def _step_line(title: str, runner: Callable[[Any], list[str]], step_id: str) -> str:
             try:
                 sub = runner(self)
-                if sub:
-                    lines.extend(self._revival_indent(sub))
-                else:
-                    lines.append("   (no details)")
             except Exception as e:
                 logger.warning("Revival step %s failed: %s", step_id, e, exc_info=True)
-                lines.extend(self._revival_indent([f"Failed: {self._revival_truncate(str(e))}"]))
+                return f"❌ {title} — {self._revival_truncate(str(e), 96)}"
+            if not sub:
+                return f"✅ {title} — ok"
+            blob = "\n".join(str(x) for x in sub).lower()
+            if "failed:" in blob or "\nfailed " in blob or blob.startswith("failed"):
+                first = self._revival_truncate(str(sub[0]).strip(), 96)
+                return f"❌ {title} — {first}"
+            hint = self._revival_truncate(str(sub[0]).strip(), 96)
+            low = hint.lower()
+            if low.startswith("reconnect:"):
+                hint = hint.split(":", 1)[-1].strip()
+                hint = self._revival_truncate(hint, 96)
+            return f"✅ {title} — {hint}"
 
-        lines.append("")
-        lines.append("End of revive.")
+        lines: list[str] = [f"Revive · {n_total} systems", ""]
+
+        if reload_result.get("success") and (reload_result.get("reloaded_count") or 0) > 0:
+            bits = [f"{p}:{','.join(sorted(auths[p]))}" for p in sorted(auths.keys())]
+            summary = " · ".join(bits)
+            summary = self._revival_truncate(summary, 140)
+            lines.append(
+                f"✅ xwauth — {reload_result['reloaded_count']} configs ({summary})"
+            )
+        else:
+            err0 = (reload_result.get("errors") or ["reload failed"])[0]
+            lines.append(f"❌ xwauth — {self._revival_truncate(str(err0), 120)}")
+
+        for plat, auth_name in token_pairs:
+            lines.append(_token_line(plat, auth_name))
+
+        for step_id, title, runner in steps:
+            lines.append(_step_line(title, runner, step_id))
+
         return "\n".join(lines)
 
     @XWAction(
@@ -567,6 +619,230 @@ class XWApiAgent(AApiAgent):
             result["success"] = False
         result["user_report"] = self._compose_revival_user_report(result)
         return result
+
+    def _collect_runtime_status_rows(self) -> list[tuple[str, bool, str]]:
+        """Build (subsystem_id, ok, detail) rows for api_status / api_health (extensible via probes)."""
+        rows: list[tuple[str, bool, str]] = []
+        active = bool(getattr(self, "_runtime_active", True))
+        paused = bool(getattr(self, "_runtime_paused", False))
+        if not active:
+            rows.append(
+                (
+                    "agent_runtime",
+                    False,
+                    "stopped — non-lifecycle actions are blocked (use /api_start or /api_restart)",
+                )
+            )
+        elif paused:
+            rows.append(
+                (
+                    "agent_runtime",
+                    False,
+                    "paused — non-lifecycle actions are blocked (use /api_resume or /api_start)",
+                )
+            )
+        else:
+            rows.append(("agent_runtime", True, "running — actions accepted"))
+
+        eng = getattr(self, "_agent_engine", None)
+        rows.append(
+            (
+                "action_engine",
+                eng is not None,
+                getattr(eng, "name", "none") if eng is not None else "registry fallback",
+            )
+        )
+
+        acts = getattr(self, "_actions", None) or []
+        rows.append(("xw_actions", True, f"{len(acts)} discovered action(s)"))
+
+        cfgs = getattr(self, "_auth_configs", None) or {}
+        if not isinstance(cfgs, dict):
+            cfgs = {}
+        ncfg = sum(len(v) for v in cfgs.values()) if cfgs else 0
+        plat_n = len(cfgs)
+        rows.append(("auth_configs", plat_n >= 0, f"{ncfg} config(s) across {plat_n} platform(s)"))
+
+        auth = getattr(self, "_auth", None)
+        rows.append(("xwauth_client", True, "bound" if auth is not None else "optional (not bound)"))
+
+        ents = getattr(self, "_entities", None) or {}
+        if not isinstance(ents, dict):
+            ents = {}
+        rows.append(("entities", True, f"{len(ents)} named entity bucket(s)"))
+
+        rows.append(
+            (
+                "oauth_client_manager",
+                getattr(self, "_oauth_client_manager", None) is not None,
+                "present",
+            )
+        )
+        rows.append(
+            (
+                "entity_session_manager",
+                getattr(self, "_entity_session_manager", None) is not None,
+                "present",
+            )
+        )
+
+        for step_id, title, runner in getattr(self, "_revival_steps", []) or []:
+            ok = True
+            detail = "registered (no output)"
+            try:
+                lines = runner(self)
+                if isinstance(lines, list) and lines:
+                    detail = self._revival_truncate(str(lines[0]), 360)
+                elif isinstance(lines, list) and not lines:
+                    detail = "runner returned empty list"
+            except Exception as e:
+                ok = False
+                detail = self._revival_truncate(f"{type(e).__name__}: {e}", 360)
+            rows.append((f"revive_step:{step_id}", ok, f"{title} — {detail}"))
+
+        for pid, title, probe in getattr(self, "_runtime_status_probes", []) or []:
+            ok = True
+            detail = ""
+            try:
+                ok, detail = probe(self)
+                detail = self._revival_truncate(str(detail), 360)
+            except Exception as e:
+                ok = False
+                detail = self._revival_truncate(f"{type(e).__name__}: {e}", 360)
+            rows.append((f"probe:{pid}", ok, f"{title} — {detail}"))
+
+        return rows
+
+    @XWAction(
+        operationId="agent.apiHealth",
+        api_name="api_health",
+        cmd_shortcut="api_health",
+        summary="Aggregate health of subsystems used by this agent",
+        description="Lightweight introspection plus optional revival-step runners and custom probes.",
+        profile=ActionProfile.COMMAND,
+        tags=["runtime", "health"],
+        roles=None,
+        audit=False,
+    )
+    def api_health(self, message: Any = None, context: dict[str, Any] | None = None) -> dict[str, Any]:
+        rows = self._collect_runtime_status_rows()
+        details = {k: {"ok": ok, "detail": d} for k, ok, d in rows}
+        healthy = all(ok for _, ok, _ in rows)
+        return {
+            "healthy": healthy,
+            "agent": getattr(self, "_name", None),
+            "subsystems": details,
+        }
+
+    @XWAction(
+        operationId="agent.apiStatus",
+        api_name="api_status",
+        cmd_shortcut="api_status",
+        summary="Human-readable runtime status for subsystems in use",
+        profile=ActionProfile.COMMAND,
+        tags=["runtime", "status"],
+        roles=None,
+        audit=False,
+    )
+    def api_status(self, message: Any = None, context: dict[str, Any] | None = None) -> str:
+        rows = self._collect_runtime_status_rows()
+        lines = [
+            f"Agent «{getattr(self, '_name', '?')}» — subsystem status",
+            "",
+        ]
+        for key, ok, detail in rows:
+            mark = "OK" if ok else "FAIL"
+            lines.append(f"[{mark}] {key}: {detail}")
+        lines.append("")
+        lines.append("Tip: add checks with register_runtime_status_probe().")
+        return "\n".join(lines)
+
+    @XWAction(
+        operationId="agent.apiStart",
+        api_name="api_start",
+        cmd_shortcut="api_start",
+        summary="Start or resume agent runtime and rediscover actions",
+        profile=ActionProfile.COMMAND,
+        tags=["runtime"],
+        roles=["admin", "owner"],
+        audit=True,
+    )
+    def api_start(self, message: Any = None, context: dict[str, Any] | None = None) -> dict[str, Any]:
+        self._runtime_active = True
+        self._runtime_paused = False
+        if getattr(self, "_auto_discover", True):
+            self._discover_actions()
+        return {"runtime": "started", "actions": len(getattr(self, "_actions", []) or [])}
+
+    @XWAction(
+        operationId="agent.apiStop",
+        api_name="api_stop",
+        cmd_shortcut="api_stop",
+        summary="Stop agent runtime (blocks non-lifecycle actions; does not exit the host process)",
+        profile=ActionProfile.COMMAND,
+        tags=["runtime"],
+        roles=["admin", "owner"],
+        audit=True,
+    )
+    def api_stop(self, message: Any = None, context: dict[str, Any] | None = None) -> dict[str, Any]:
+        self._runtime_active = False
+        self._runtime_paused = False
+        return {"runtime": "stopped"}
+
+    @XWAction(
+        operationId="agent.apiPause",
+        api_name="api_pause",
+        cmd_shortcut="api_pause",
+        summary="Pause agent actions (blocks business actions; lifecycle + /api_resume still work)",
+        profile=ActionProfile.COMMAND,
+        tags=["runtime"],
+        roles=["admin", "owner"],
+        audit=True,
+    )
+    def api_pause(self, message: Any = None, context: dict[str, Any] | None = None) -> dict[str, Any]:
+        if not bool(getattr(self, "_runtime_active", True)):
+            return {
+                "runtime": "unchanged",
+                "paused": False,
+                "detail": "Agent is stopped; use /api_start before /api_pause.",
+            }
+        self._runtime_paused = True
+        return {"runtime": "paused", "paused": True}
+
+    @XWAction(
+        operationId="agent.apiResume",
+        api_name="api_resume",
+        cmd_shortcut="api_resume",
+        summary="Resume agent after /api_pause (clears pause; does not reload actions)",
+        profile=ActionProfile.COMMAND,
+        tags=["runtime"],
+        roles=["admin", "owner"],
+        audit=True,
+    )
+    def api_resume(self, message: Any = None, context: dict[str, Any] | None = None) -> dict[str, Any]:
+        self._runtime_paused = False
+        return {
+            "runtime": "resumed" if bool(getattr(self, "_runtime_active", True)) else "stopped",
+            "paused": False,
+        }
+
+    @XWAction(
+        operationId="agent.apiRestart",
+        api_name="api_restart",
+        cmd_shortcut="api_restart",
+        summary="Restart agent runtime (stop + start + rediscover actions)",
+        profile=ActionProfile.COMMAND,
+        tags=["runtime"],
+        roles=["admin", "owner"],
+        audit=True,
+    )
+    def api_restart(self, message: Any = None, context: dict[str, Any] | None = None) -> dict[str, Any]:
+        self._runtime_paused = False
+        self._runtime_active = True
+        if getattr(self, "_auto_discover", True):
+            self._discover_actions()
+        return {"runtime": "restarted", "actions": len(getattr(self, "_actions", []) or [])}
+
     # ============================================================================
     # Session Management (Category 4) - Generic session handling
     # ============================================================================
@@ -832,3 +1108,6 @@ class XWApiAgent(AApiAgent):
         """String representation."""
         auth_status = "auth" if self.has_auth() else "no-auth"
         return f"XWApiAgent(name={self._name}, actions={len(self._actions)}, {auth_status})"
+
+
+_install_xwapi_runtime_method_guards(XWApiAgent)

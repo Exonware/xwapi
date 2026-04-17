@@ -8,7 +8,7 @@ Helpers to wire *exposable actions* (XWAction) onto HTTP apps.
 Company: eXonware.com
 Author: eXonware Backend Team
 Email: connect@exonware.com
-Version: 0.9.0.9
+Version: 0.9.0.10
 """
 
 from __future__ import annotations

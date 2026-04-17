@@ -13,7 +13,7 @@ so you can swap deployment style without rewriting actions.
 Company: eXonware.com
 Author: eXonware Backend Team
 Email: connect@exonware.com
-Version: 0.9.0.9
+Version: 0.9.0.10
 """
 # =============================================================================
 # XWLAZY — GUIDE_00_MASTER: config_package_lazy_install_enabled (EARLY)

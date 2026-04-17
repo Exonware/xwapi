@@ -5,7 +5,7 @@ xwapi Middleware Package
 Company: eXonware.com
 Author: eXonware Backend Team
 Email: connect@exonware.com
-Version: 0.9.0.9
+Version: 0.9.0.10
 """
 
 from .trace import trace_middleware
