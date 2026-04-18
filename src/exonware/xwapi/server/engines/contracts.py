@@ -7,7 +7,7 @@ Message Queue, Event-Driven, Streaming, etc.
 Company: eXonware.com
 Author: eXonware Backend Team
 Email: connect@exonware.com
-Version: 0.9.0.10
+Version: 0.9.0.11
 """
 
 from __future__ import annotations

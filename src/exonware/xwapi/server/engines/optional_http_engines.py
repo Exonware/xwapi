@@ -483,8 +483,7 @@ class DjangoServerEngine(AHttpServerEngineBase):
         ]
 
         if not settings.configured:
-            _mod = sys.modules[__name__]
-            _mod.urlpatterns = urlpatterns  # type: ignore[attr-defined]
+            globals()["urlpatterns"] = urlpatterns
             settings.configure(
                 ROOT_URLCONF=__name__,
                 SECRET_KEY="xwapi-django-engine-placeholder",

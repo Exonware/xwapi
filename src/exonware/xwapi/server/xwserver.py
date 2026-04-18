@@ -11,7 +11,7 @@ author actions/entities; HTTP engine selection is a deployment concern.
 Company: eXonware.com
 Author: eXonware Backend Team
 Email: connect@exonware.com
-Version: 0.9.0.10
+Version: 0.9.0.11
 """
 
 from typing import Any

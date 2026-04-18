@@ -15,14 +15,14 @@ def _today_release_date() -> str:
     return datetime.now().strftime("%d-%b-%Y")
 
 
-__version__ = "0.9.0.10"
+__version__ = "0.9.0.11"
 __author__ = "eXonware Backend Team"
 __email__ = "connect@exonware.com"
 __date__ = _today_release_date()
 VERSION_MAJOR = 0
 VERSION_MINOR = 9
 VERSION_PATCH = 0
-VERSION_BUILD = 10
+VERSION_BUILD = 11
 VERSION_SUFFIX = ""
 VERSION_STRING = __version__ + VERSION_SUFFIX
 
