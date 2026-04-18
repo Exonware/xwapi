@@ -5,7 +5,7 @@ Protocol-agnostic interface for email storage used by SMTP, POP3, and IMAP engin
 Company: eXonware.com
 Author: eXonware Backend Team
 Email: connect@exonware.com
-Version: 0.9.0.11
+Version: 0.9.0.12
 """
 
 from typing import Protocol, Optional, List, Dict, Any

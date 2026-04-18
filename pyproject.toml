@@ -22,9 +22,9 @@ classifiers = [
   "Topic :: Internet :: WWW/HTTP",
 ]
 dependencies = [
-  "exonware-xwsystem==0.9.0.41",
+  "exonware-xwsystem==0.9.0.42",
   "exonware-xwentity==0.6.0.11",
-  "exonware-xwaction==0.9.0.14",
+  "exonware-xwaction==0.9.0.15",
   "exonware-xwschema==0.4.0.18",
   "exonware-xwdata==0.9.0.17",
   "fastapi>=0.104.0",
@@ -39,7 +39,7 @@ text = "Apache-2.0"
 [project.optional-dependencies]
 # First-party XW libs composed by this package (excludes exonware-xwsystem==0.9.0.37; see lazy/full).
 xw = [
-  "exonware-xwaction==0.9.0.14",
+  "exonware-xwaction==0.9.0.15",
   "exonware-xwauth==0.0.1.11",
   "exonware-xwdata==0.9.0.17",
   "exonware-xwentity==0.6.0.11",
@@ -47,10 +47,10 @@ xw = [
   "exonware-xwstorage==0.0.1.9",
 ]
 lazy = [
-  "exonware-xwapi[xw]==0.9.0.11",
+  "exonware-xwapi[xw]==0.9.0.12",
   "exonware-xwlazy==1.0.1.81",
-  "exonware-xwsystem[lazy]==0.9.0.41",
-  "exonware-xwaction[xw]==0.9.0.14",
+  "exonware-xwsystem[lazy]==0.9.0.42",
+  "exonware-xwaction[xw]==0.9.0.15",
   "exonware-xwauth[xw]==0.0.1.11",
   "exonware-xwdata[xw]==0.9.0.17",
   "exonware-xwentity[xw]==0.6.0.11",
@@ -58,9 +58,9 @@ lazy = [
   "exonware-xwstorage[xw]==0.0.1.9",
 ]
 full = [
-  "exonware-xwapi[xw]==0.9.0.11",
-  "exonware-xwsystem[full]==0.9.0.41",
-  "exonware-xwaction[xw]==0.9.0.14",
+  "exonware-xwapi[xw]==0.9.0.12",
+  "exonware-xwsystem[full]==0.9.0.42",
+  "exonware-xwaction[xw]==0.9.0.15",
   "exonware-xwdata[xw]==0.9.0.17",
   "exonware-xwentity[xw]==0.6.0.11",
   "exonware-xwschema[xw]==0.4.0.18",
@@ -111,7 +111,7 @@ full = [
   "zstandard",
 ]
 dev = [
-  "exonware-xwapi[full]==0.9.0.11",
+  "exonware-xwapi[full]==0.9.0.12",
   "black>=23.0.0",
   "isort>=5.12.0",
   "mypy>=1.0.0",

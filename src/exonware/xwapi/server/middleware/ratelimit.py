@@ -7,7 +7,7 @@ Returns standard rate limit headers.
 Company: eXonware.com
 Author: eXonware Backend Team
 Email: connect@exonware.com
-Version: 0.9.0.11
+Version: 0.9.0.12
 """
 
 from collections.abc import Callable

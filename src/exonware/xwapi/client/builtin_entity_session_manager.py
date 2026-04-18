@@ -12,7 +12,7 @@ Handles both single and multi-entity session scenarios.
 Company: eXonware.com
 Author: eXonware Backend Team
 Email: connect@exonware.com
-Version: 0.9.0.11
+Version: 0.9.0.12
 Generation Date: 07-Jan-2025
 """
 

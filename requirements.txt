@@ -1,6 +1,6 @@
 # Source size (src/*): ~549.5 KB
 pip                     # Package installer (CI and lazy install)
-exonware-xwsystem==0.9.0.41
+exonware-xwsystem==0.9.0.42
 exonware-xwentity==0.6.0.11
 requests>=2.31.0
 fastapi>=0.104.0
