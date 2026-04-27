@@ -1,0 +1,1 @@
+xwapi is the core HTTP API server for eXonware libraries, exposing secure REST endpoints and integration surfaces that connect storage, auth, query, and automation services into production-ready applications.

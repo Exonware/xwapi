@@ -1,0 +1,8 @@
+projects:
+  xwapi:
+    repo: xwapi
+    package_main: exonware-xwapi
+    package_wrapper: xwapi
+    python_version: "3.12"
+    has_wrapper: true
+    uses_check_versions: true

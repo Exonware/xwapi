@@ -1,0 +1,129 @@
+# Source size (src/*): ~549.5 KB
+[build-system]
+requires = [
+    "hatchling",
+]
+build-backend = "hatchling.build"
+
+[project]
+name = "xwapi"
+dynamic = [
+    "version",
+]
+description = "Convenience wrapper for exonware-xwapi - provides 'import xwapi' alias"
+readme = "README.md"
+requires-python = ">=3.12"
+keywords = [
+    "api",
+    "fastapi",
+    "flask",
+    "openapi",
+    "rest",
+    "graphql",
+    "oauth2",
+    "exonware",
+    "actions",
+    "agent",
+    "client-server",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Information Technology",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: Internet :: WWW/HTTP",
+]
+dependencies = [
+    "exonware-xwapi",
+]
+authors = [
+    { name = "eXonware Backend Team", email = "connect@exonware.com" },
+]
+
+[project.license]
+text = "Apache-2.0"
+
+[project.optional-dependencies]
+# First-party XW libs composed by this package (excludes exonware-xwsystem==0.9.0.37; see lazy/full).
+xw = [
+    "exonware-xwapi[xw]",
+]
+lazy = [
+    "exonware-xwapi[lazy]",
+]
+full = [
+    "exonware-xwapi[full]",
+]
+dev = [
+    "exonware-xwapi[dev]",
+]
+
+[project.urls]
+Homepage = "https://exonware.com"
+Repository = "https://github.com/exonware/xwapi"
+Documentation = "https://github.com/exonware/xwapi#readme"
+Subtree = "https://github.com/exonware/xwapi.git"
+
+[tool.black]
+line-length = 88
+target-version = [
+    "py312",
+]
+
+[tool.isort]
+profile = "black"
+line_length = 88
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+disallow_any_generics = true
+disallow_untyped_calls = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+disallow_untyped_decorators = true
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_no_return = true
+warn_unreachable = true
+
+[tool.pytest.ini_options]
+testpaths = [
+    "tests",
+]
+python_files = [
+    "test_*.py",
+]
+python_classes = [
+    "Test*",
+]
+python_functions = [
+    "test_*",
+]
+addopts = "-v --tb=short"
+markers = []
+
+[tool.hatch.version]
+path = "src/exonware/xwapi/version.py"
+
+[tool.hatch.build.targets.wheel]
+only-include = [
+    "README.md",
+    "src/xwapi_wrapper.py",
+]
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "/src",
+    "/tests",
+    "/README.md",
+    "/.github",
+]
